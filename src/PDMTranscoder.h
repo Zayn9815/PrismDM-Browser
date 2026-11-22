@@ -7,7 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface PDMTranscodeJob : NSObject
 @property (nonatomic, copy, readonly) NSString *jobID;
-@property (nonatomic, assign, readonly, getter=isCancelled) BOOL cancelled;
+@property (atomic, assign, readonly, getter=isCancelled) BOOL cancelled;
 - (void)cancel;
 @end
 

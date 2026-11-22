@@ -149,14 +149,14 @@ typedef NS_ENUM(NSInteger, PDMAudioFormat) {
 @property (nonatomic, assign) BOOL studioOnlyMode; // Used from Library/Player for Convert & Extract Audio
 @property (nonatomic, copy, nullable) NSString *localFilePathForStudio;
 @property (nonatomic, copy, nullable) void (^onDownloadRequested)(PDMDetectedMedia *media,
-                                                                  nullable PDMMediaVideoVariant *selectedVariant,
-                                                                  nullable PDMMediaAudioTrack *selectedAudio,
+                                                                  PDMMediaVideoVariant * _Nullable selectedVariant,
+                                                                  PDMMediaAudioTrack * _Nullable selectedAudio,
                                                                   PDMMediaFormatConfig *config,
                                                                   NSString *finalFilename,
                                                                   BOOL startImmediately);
 @property (nonatomic, copy, nullable) void (^onStreamPreviewRequested)(NSURL *streamURL,
                                                                        NSString *title,
-                                                                       nullable NSDictionary<NSString *, NSString *> *headers);
+                                                                       NSDictionary<NSString *, NSString *> * _Nullable headers);
 @end
 
 @interface PDMResourceGrabberSheetViewController : PDMGlassSheetViewController
