@@ -1,0 +1,28 @@
+# macOS & Finder
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Build artifacts & unsigned IPAs
+build/
+*.ipa
+*.app
+*.dSYM/
+*.dSYM.zip
+
+# Xcode
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.xccheckout
+
+# Python & temporary files
+__pycache__/
+*.pyc
+*.tmp
+*.log
+.env

@@ -1,0 +1,46 @@
+PROPRIETARY SOFTWARE LICENSE — ALL RIGHTS RESERVED
+
+PrismDM Browser
+Copyright © 2026 PrismDM. All Rights Reserved.
+
+NOTICE: THIS SOFTWARE IS STRICTLY CLOSED-SOURCE AND PROPRIETARY.
+IT IS NOT OPEN SOURCE SOFTWARE.
+
+1. OWNERSHIP & INTELLECTUAL PROPERTY
+All source code, object code, compiled binaries, user interface designs,
+application icons, artwork, shaders, audio/video processing modules,
+documentation, and associated assets contained in this repository
+("Software") are the exclusive proprietary intellectual property of PrismDM
+("Copyright Owner") and are protected by international copyright, trade
+secret, and intellectual property laws.
+
+2. RESTRICTIONS
+Except as explicitly authorized in a separate, signed written license
+agreement executed by the Copyright Owner, you may NOT:
+  (a) copy, reproduce, mirror, or republish any portion of the Software;
+  (b) distribute, sublicense, sell, lease, rent, or transfer the Software
+      or compiled `.ipa` / `.app` packages to any third party;
+  (c) modify, adapt, translate, or create derivative works based on the
+      Software;
+  (d) reverse engineer, decompile, disassemble, or attempt to derive
+      algorithms or proprietary techniques from compiled artifacts;
+  (e) remove, obscure, or alter any proprietary copyright, trademark, or
+      legal notices embedded in the Software or its metadata; or
+  (f) use any portion of the Software for commercial, enterprise, or
+      redistribution purposes.
+
+3. NO LICENSE GRANT
+Nothing in this repository grants, by implication, estoppel, or otherwise,
+any license or right under any copyright, patent, trademark, or trade
+secret of the Copyright Owner. No open-source license grant applies.
+
+4. DISCLAIMER OF WARRANTY & LIMITATION OF LIABILITY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT OWNER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE.
+
+5. CONTACT & LICENSING INQUIRIES
+To request written permission or commercial licensing terms, contact the
+Copyright Owner directly through the private repository owner channel.

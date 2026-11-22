@@ -1,0 +1,55 @@
+name: Build PrismDM IPA (iOS 26)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios26-ipa:
+    name: Compile arm64 iOS 26 & Package Unsigned IPA
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26 Toolchain
+        run: |
+          if [ -d "/Applications/Xcode_26.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_26.app/Contents/Developer"
+          elif [ -d "/Applications/Xcode.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode.app/Contents/Developer"
+          fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Run Static Verifier & Strict Compile Check
+        run: |
+          chmod +x build.sh tests/run_all_tests.sh
+          ./tests/run_all_tests.sh
+
+      - name: Build Unsigned PrismDM.ipa
+        run: |
+          ./build.sh
+          ls -lh PrismDM.ipa
+
+      - name: Upload PrismDM.ipa Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrismDM-iOS26-arm64-IPA
+          path: PrismDM.ipa
+          if-no-files-found: error
+
+      - name: Attach PrismDM.ipa to GitHub Release (on Tag Push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PrismDM.ipa
+          generate_release_notes: true
