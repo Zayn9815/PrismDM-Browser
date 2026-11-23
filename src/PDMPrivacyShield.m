@@ -321,63 +321,108 @@ static NSString *const kPDMThirdPartyScriptRuleListIdentifier = @"com.prismdm.br
 }
 
 - (void)persistStats {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setInteger:self.adsBlocked forKey:kPDMStatsAdsKey];
-    [defaults setInteger:self.trackersBlocked forKey:kPDMStatsTrackersKey];
-    [defaults setInteger:self.popupsBlocked forKey:kPDMStatsPopupsKey];
-    [defaults setInteger:(NSInteger)self.bytesSaved forKey:kPDMStatsBytesKey];
-    [defaults setInteger:self.downloadsCompleted forKey:kPDMStatsDownloadsKey];
-    [[NSNotificationCenter defaultCenter] postNotificationName:PDMPrivacyStatsDidChangeNotification object:self];
+    dispatch_block_t work = ^{
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setInteger:self.adsBlocked forKey:kPDMStatsAdsKey];
+        [defaults setInteger:self.trackersBlocked forKey:kPDMStatsTrackersKey];
+        [defaults setInteger:self.popupsBlocked forKey:kPDMStatsPopupsKey];
+        [defaults setInteger:(NSInteger)self.bytesSaved forKey:kPDMStatsBytesKey];
+        [defaults setInteger:self.downloadsCompleted forKey:kPDMStatsDownloadsKey];
+        [[NSNotificationCenter defaultCenter] postNotificationName:PDMPrivacyStatsDidChangeNotification object:self];
+    };
+    if ([NSThread isMainThread]) {
+        work();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), work);
+    }
 }
 
 - (void)recordBlockedAdForHost:(nullable NSString *)host count:(NSInteger)count {
     if (count <= 0) return;
-    self.adsBlocked += count;
-    self.bytesSaved += (int64_t)count * 64 * 1024;
-    if (host.length > 0) {
-        NSString *k = host.lowercaseString;
-        self.domainBlockedCounts[k] = @(self.domainBlockedCounts[k].integerValue + count);
+    NSString *hostCopy = [host copy];
+    dispatch_block_t work = ^{
+        self.adsBlocked += count;
+        self.bytesSaved += (int64_t)count * 64 * 1024;
+        if (hostCopy.length > 0) {
+            NSString *k = hostCopy.lowercaseString;
+            self.domainBlockedCounts[k] = @(self.domainBlockedCounts[k].integerValue + count);
+        }
+        [self persistStats];
+    };
+    if ([NSThread isMainThread]) {
+        work();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), work);
     }
-    [self persistStats];
 }
 
 - (void)recordBlockedTrackerForHost:(nullable NSString *)host count:(NSInteger)count {
     if (count <= 0) return;
-    self.trackersBlocked += count;
-    self.bytesSaved += (int64_t)count * 28 * 1024;
-    if (host.length > 0) {
-        NSString *k = host.lowercaseString;
-        self.domainBlockedCounts[k] = @(self.domainBlockedCounts[k].integerValue + count);
+    NSString *hostCopy = [host copy];
+    dispatch_block_t work = ^{
+        self.trackersBlocked += count;
+        self.bytesSaved += (int64_t)count * 28 * 1024;
+        if (hostCopy.length > 0) {
+            NSString *k = hostCopy.lowercaseString;
+            self.domainBlockedCounts[k] = @(self.domainBlockedCounts[k].integerValue + count);
+        }
+        [self persistStats];
+    };
+    if ([NSThread isMainThread]) {
+        work();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), work);
     }
-    [self persistStats];
 }
 
 - (void)recordBlockedPopupForHost:(nullable NSString *)host {
-    self.popupsBlocked += 1;
-    self.bytesSaved += 96 * 1024;
-    if (host.length > 0) {
-        NSString *k = host.lowercaseString;
-        self.domainBlockedCounts[k] = @(self.domainBlockedCounts[k].integerValue + 1);
+    NSString *hostCopy = [host copy];
+    dispatch_block_t work = ^{
+        self.popupsBlocked += 1;
+        self.bytesSaved += 96 * 1024;
+        if (hostCopy.length > 0) {
+            NSString *k = hostCopy.lowercaseString;
+            self.domainBlockedCounts[k] = @(self.domainBlockedCounts[k].integerValue + 1);
+        }
+        [self persistStats];
+    };
+    if ([NSThread isMainThread]) {
+        work();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), work);
     }
-    [self persistStats];
 }
 
 - (void)recordDownloadCompletedWithBytes:(int64_t)bytes {
-    self.downloadsCompleted += 1;
-    if (bytes > 0) {
-        self.bytesSaved += (bytes / 20); // efficiency credit
+    dispatch_block_t work = ^{
+        self.downloadsCompleted += 1;
+        if (bytes > 0) {
+            self.bytesSaved += (bytes / 20); // efficiency credit
+        }
+        [self persistStats];
+    };
+    if ([NSThread isMainThread]) {
+        work();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), work);
     }
-    [self persistStats];
 }
 
 - (void)resetStats {
-    self.adsBlocked = 0;
-    self.trackersBlocked = 0;
-    self.popupsBlocked = 0;
-    self.bytesSaved = 0;
-    self.downloadsCompleted = 0;
-    [self.domainBlockedCounts removeAllObjects];
-    [self persistStats];
+    dispatch_block_t work = ^{
+        self.adsBlocked = 0;
+        self.trackersBlocked = 0;
+        self.popupsBlocked = 0;
+        self.bytesSaved = 0;
+        self.downloadsCompleted = 0;
+        [self.domainBlockedCounts removeAllObjects];
+        [self persistStats];
+    };
+    if ([NSThread isMainThread]) {
+        work();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), work);
+    }
 }
 
 #pragma mark - HTTPS Upgrade & User Agents

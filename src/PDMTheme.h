@@ -9,18 +9,14 @@ extern NSNotificationName const PDMLayoutDidChangeNotification;
 extern NSNotificationName const PDMSettingsDidChangeNotification;
 
 typedef NS_ENUM(NSInteger, PDMThemeID) {
-    PDMThemeLiquidGlass = 0,
-    PDMThemeObsidianOLED = 1,
-    PDMThemeBraveEmber = 2,
-    PDMThemeChromeMinimal = 3,
-    PDMThemeArcticGlacier = 4,
-    PDMThemeCyberMidnight = 5
+    PDMThemeSystem = 0,
+    PDMThemeLight = 1,
+    PDMThemeDark = 2
 };
 
 typedef NS_ENUM(NSInteger, PDMLayoutPreset) {
-    PDMLayoutFloatingBottom = 0,
-    PDMLayoutChromeMinimalTop = 1,
-    PDMLayoutCompactPowerBar = 2
+    PDMLayoutChromeTop = 0,
+    PDMLayoutChromeBottom = 1
 };
 
 typedef NS_ENUM(NSInteger, PDMSearchEngine) {

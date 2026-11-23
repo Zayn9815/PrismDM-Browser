@@ -6,9 +6,7 @@
 #pragma mark - PDMGlassView
 
 @interface PDMGlassView ()
-@property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) UIView *tintOverlay;
-@property (nonatomic, strong) CAGradientLayer *topRimLayer;
 @property (nonatomic, strong) UIView *clippingContainer;
 @property (nonatomic, strong, readwrite) UIView *contentView;
 @end
@@ -20,6 +18,7 @@
     if (self) {
         _glassCornerRadius = radius;
         _elevated = elevated;
+        _showAmbientShadow = elevated;
         [self applyTheme];
         [self setNeedsLayout];
     }
@@ -29,9 +28,9 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        _glassCornerRadius = 18.0;
+        _glassCornerRadius = 16.0;
         _elevated = NO;
-        _showAmbientShadow = YES;
+        _showAmbientShadow = NO;
         self.backgroundColor = [UIColor clearColor];
 
         _clippingContainer = [[UIView alloc] init];
@@ -40,19 +39,10 @@
         _clippingContainer.layer.cornerCurve = kCACornerCurveContinuous;
         [self addSubview:_clippingContainer];
 
-        _blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
-        _blurView.translatesAutoresizingMaskIntoConstraints = NO;
-        [_clippingContainer addSubview:_blurView];
-
         _tintOverlay = [[UIView alloc] init];
         _tintOverlay.translatesAutoresizingMaskIntoConstraints = NO;
         _tintOverlay.userInteractionEnabled = NO;
         [_clippingContainer addSubview:_tintOverlay];
-
-        _topRimLayer = [CAGradientLayer layer];
-        _topRimLayer.startPoint = CGPointMake(0.0, 0.0);
-        _topRimLayer.endPoint = CGPointMake(0.0, 1.0);
-        [_clippingContainer.layer addSublayer:_topRimLayer];
 
         _contentView = [[UIView alloc] init];
         _contentView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -64,11 +54,6 @@
             [_clippingContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [_clippingContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
             [_clippingContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-
-            [_blurView.topAnchor constraintEqualToAnchor:_clippingContainer.topAnchor],
-            [_blurView.leadingAnchor constraintEqualToAnchor:_clippingContainer.leadingAnchor],
-            [_blurView.trailingAnchor constraintEqualToAnchor:_clippingContainer.trailingAnchor],
-            [_blurView.bottomAnchor constraintEqualToAnchor:_clippingContainer.bottomAnchor],
 
             [_tintOverlay.topAnchor constraintEqualToAnchor:_clippingContainer.topAnchor],
             [_tintOverlay.leadingAnchor constraintEqualToAnchor:_clippingContainer.leadingAnchor],
@@ -99,7 +84,11 @@
     CGFloat radius = self.pillShape ? (CGRectGetHeight(self.bounds) * 0.5) : self.glassCornerRadius;
     self.clippingContainer.layer.cornerRadius = radius;
     self.layer.cornerRadius = radius;
-    self.topRimLayer.frame = CGRectMake(0.0, 0.0, CGRectGetWidth(self.bounds), MIN(22.0, CGRectGetHeight(self.bounds) * 0.45));
+
+    PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
+    UIColor *border = self.customBorderColor ?: spec.glassSpecularBorderColor;
+    self.clippingContainer.layer.borderColor = [border resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+
     if (self.showAmbientShadow) {
         self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:radius].CGPath;
     } else {
@@ -129,20 +118,16 @@
 
 - (void)applyTheme {
     PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
-    self.blurView.effect = [UIBlurEffect effectWithStyle:spec.blurStyle];
     self.tintOverlay.backgroundColor = self.customTintColor ?: (self.elevated ? spec.glassElevatedTintColor : spec.glassTintColor);
     UIColor *border = self.customBorderColor ?: spec.glassSpecularBorderColor;
-    self.clippingContainer.layer.borderWidth = 0.75;
-    self.clippingContainer.layer.borderColor = border.CGColor;
-
-    UIColor *rim = [spec.glassTopRimColor colorWithAlphaComponent:spec.isOLED ? 0.14 : 0.22];
-    self.topRimLayer.colors = @[(__bridge id)rim.CGColor, (__bridge id)[UIColor clearColor].CGColor];
+    self.clippingContainer.layer.borderWidth = 0.5;
+    self.clippingContainer.layer.borderColor = [border resolvedColorWithTraitCollection:self.traitCollection].CGColor;
 
     if (self.showAmbientShadow) {
         self.layer.shadowColor = [UIColor blackColor].CGColor;
-        self.layer.shadowOpacity = spec.isDark ? 0.34f : 0.12f;
-        self.layer.shadowOffset = CGSizeMake(0.0, 6.0);
-        self.layer.shadowRadius = 14.0;
+        self.layer.shadowOpacity = 0.08f;
+        self.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+        self.layer.shadowRadius = 8.0;
     } else {
         self.layer.shadowOpacity = 0.0f;
     }
@@ -173,6 +158,7 @@
         _symbolName = [symbolName copy];
         _horizontalPadding = 12.0;
         _verticalPadding = 8.0;
+        _symbolPointSize = 14.5;
 
         _glassBackground = [[PDMGlassView alloc] initWithCornerRadius:18.0 elevated:NO];
         _glassBackground.pillShape = YES;
@@ -195,15 +181,15 @@
         [_stackView addArrangedSubview:_iconView];
 
         _titleLabel = [[UILabel alloc] init];
-        _titleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.5 weight:UIFontWeightSemibold];
+        _titleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.5 weight:UIFontWeightMedium];
         _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [_stackView addArrangedSubview:_titleLabel];
 
         _badgeLabel = [[UILabel alloc] init];
-        _badgeLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:11.0 weight:UIFontWeightBold];
+        _badgeLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:10.5 weight:UIFontWeightSemibold];
         _badgeLabel.textAlignment = NSTextAlignmentCenter;
         _badgeLabel.clipsToBounds = YES;
-        _badgeLabel.layer.cornerRadius = 8.5;
+        _badgeLabel.layer.cornerRadius = 8.0;
         [_badgeLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [_stackView addArrangedSubview:_badgeLabel];
 
@@ -221,8 +207,8 @@
             _trailingConstraint,
             _topConstraint,
             _bottomConstraint,
-            [_badgeLabel.heightAnchor constraintEqualToConstant:17.0],
-            [_badgeLabel.widthAnchor constraintGreaterThanOrEqualToConstant:17.0]
+            [_badgeLabel.heightAnchor constraintEqualToConstant:16.0],
+            [_badgeLabel.widthAnchor constraintGreaterThanOrEqualToConstant:16.0]
         ]];
 
         [[NSNotificationCenter defaultCenter] addObserver:self
@@ -261,6 +247,11 @@
     [self refreshContent];
 }
 
+- (void)setSymbolPointSize:(CGFloat)symbolPointSize {
+    _symbolPointSize = symbolPointSize;
+    [self refreshContent];
+}
+
 - (void)setBadgeText:(nullable NSString *)badgeText {
     _badgeText = [badgeText copy];
     [self refreshContent];
@@ -276,6 +267,11 @@
     [self applyTheme];
 }
 
+- (void)setBorderless:(BOOL)borderless {
+    _borderless = borderless;
+    [self applyTheme];
+}
+
 - (void)setCustomAccentColor:(nullable UIColor *)customAccentColor {
     _customAccentColor = customAccentColor;
     [self applyTheme];
@@ -283,15 +279,15 @@
 
 - (void)setHighlighted:(BOOL)highlighted {
     [super setHighlighted:highlighted];
-    [UIView animateWithDuration:0.14 delay:0.0 options:UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.transform = highlighted ? CGAffineTransformMakeScale(0.95, 0.95) : CGAffineTransformIdentity;
-        self.alpha = highlighted ? 0.85 : 1.0;
+    [UIView animateWithDuration:0.12 delay:0.0 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = highlighted ? CGAffineTransformMakeScale(0.96, 0.96) : CGAffineTransformIdentity;
+        self.alpha = highlighted ? 0.65 : 1.0;
     } completion:nil];
 }
 
 - (void)refreshContent {
     if (self.symbolName.length > 0) {
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14.0 weight:UIImageSymbolWeightSemibold];
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:self.symbolPointSize weight:UIImageSymbolWeightMedium];
         self.iconView.image = [UIImage systemImageNamed:self.symbolName withConfiguration:cfg];
         self.iconView.hidden = NO;
     } else {
@@ -314,38 +310,42 @@
 - (void)applyTheme {
     PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
     UIColor *accent = self.customAccentColor ?: spec.accentColor;
+    self.layer.shadowOpacity = 0.0f;
 
     if (self.prominentAccent) {
         self.glassBackground.customTintColor = accent;
-        self.glassBackground.customBorderColor = [UIColor colorWithWhite:1.0 alpha:0.38];
-        self.titleLabel.textColor = [UIColor whiteColor];
-        self.iconView.tintColor = [UIColor whiteColor];
-        self.badgeLabel.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.25];
-        self.badgeLabel.textColor = [UIColor whiteColor];
-        self.layer.shadowColor = accent.CGColor;
-        self.layer.shadowOpacity = 0.42f;
-        self.layer.shadowRadius = 10.0;
-        self.layer.shadowOffset = CGSizeMake(0.0, 4.0);
+        self.glassBackground.customBorderColor = [UIColor clearColor];
+        UIColor *onAccent = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
+            return (tc.userInterfaceStyle == UIUserInterfaceStyleDark)
+                ? [UIColor colorWithRed:0.12 green:0.13 blue:0.14 alpha:1.0]
+                : [UIColor whiteColor];
+        }];
+        self.titleLabel.textColor = onAccent;
+        self.iconView.tintColor = onAccent;
+        self.badgeLabel.backgroundColor = [onAccent colorWithAlphaComponent:0.22];
+        self.badgeLabel.textColor = onAccent;
     } else if (self.glowing) {
-        UIColor *glow = self.customAccentColor ?: spec.mediaGlowColor;
-        self.glassBackground.customTintColor = [glow colorWithAlphaComponent:0.22];
-        self.glassBackground.customBorderColor = [glow colorWithAlphaComponent:0.72];
-        self.titleLabel.textColor = glow;
-        self.iconView.tintColor = glow;
-        self.badgeLabel.backgroundColor = glow;
-        self.badgeLabel.textColor = [UIColor blackColor];
-        self.layer.shadowColor = glow.CGColor;
-        self.layer.shadowOpacity = 0.45f;
-        self.layer.shadowRadius = 9.0;
-        self.layer.shadowOffset = CGSizeZero;
-    } else {
-        self.glassBackground.customTintColor = nil;
-        self.glassBackground.customBorderColor = nil;
+        UIColor *tone = self.customAccentColor ?: spec.accentColor;
+        self.glassBackground.customTintColor = [tone colorWithAlphaComponent:0.14];
+        self.glassBackground.customBorderColor = [UIColor clearColor];
+        self.titleLabel.textColor = tone;
+        self.iconView.tintColor = tone;
+        self.badgeLabel.backgroundColor = tone;
+        self.badgeLabel.textColor = [UIColor whiteColor];
+    } else if (self.borderless) {
+        self.glassBackground.customTintColor = [UIColor clearColor];
+        self.glassBackground.customBorderColor = [UIColor clearColor];
         self.titleLabel.textColor = spec.primaryTextColor;
         self.iconView.tintColor = self.customAccentColor ?: spec.primaryTextColor;
         self.badgeLabel.backgroundColor = accent;
         self.badgeLabel.textColor = [UIColor whiteColor];
-        self.layer.shadowOpacity = 0.0f;
+    } else {
+        self.glassBackground.customTintColor = nil;
+        self.glassBackground.customBorderColor = [UIColor clearColor];
+        self.titleLabel.textColor = spec.primaryTextColor;
+        self.iconView.tintColor = self.customAccentColor ?: spec.primaryTextColor;
+        self.badgeLabel.backgroundColor = accent;
+        self.badgeLabel.textColor = [UIColor whiteColor];
     }
     [self.glassBackground applyTheme];
 }
@@ -371,7 +371,7 @@
         _titleText = [title copy];
         _subtitleText = [subtitle copy];
 
-        _glassBackground = [[PDMGlassView alloc] initWithCornerRadius:14.0 elevated:NO];
+        _glassBackground = [[PDMGlassView alloc] initWithCornerRadius:12.0 elevated:NO];
         _glassBackground.showAmbientShadow = NO;
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.translatesAutoresizingMaskIntoConstraints = NO;
@@ -398,12 +398,12 @@
         [_outerStack addArrangedSubview:_textStack];
 
         _titleLabel = [[UILabel alloc] init];
-        _titleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.0 weight:UIFontWeightSemibold];
+        _titleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.0 weight:UIFontWeightMedium];
         _titleLabel.text = _titleText;
         [_textStack addArrangedSubview:_titleLabel];
 
         _subtitleLabel = [[UILabel alloc] init];
-        _subtitleLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:10.5 weight:UIFontWeightMedium];
+        _subtitleLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:10.5 weight:UIFontWeightRegular];
         _subtitleLabel.text = _subtitleText;
         _subtitleLabel.hidden = (_subtitleText.length == 0);
         [_textStack addArrangedSubview:_subtitleLabel];
@@ -446,7 +446,7 @@
 - (void)setSymbolName:(nullable NSString *)symbolName {
     _symbolName = [symbolName copy];
     if (symbolName.length > 0) {
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:12.5 weight:UIImageSymbolWeightSemibold];
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:12.5 weight:UIImageSymbolWeightMedium];
         self.iconView.image = [UIImage systemImageNamed:symbolName withConfiguration:cfg];
         self.iconView.hidden = NO;
     } else {
@@ -462,30 +462,26 @@
 - (void)setHighlighted:(BOOL)highlighted {
     [super setHighlighted:highlighted];
     [UIView animateWithDuration:0.12 animations:^{
-        self.transform = highlighted ? CGAffineTransformMakeScale(0.96, 0.96) : CGAffineTransformIdentity;
+        self.transform = highlighted ? CGAffineTransformMakeScale(0.97, 0.97) : CGAffineTransformIdentity;
     }];
 }
 
 - (void)applyTheme {
     PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
     UIColor *accent = self.customAccentColor ?: spec.accentColor;
+    self.layer.shadowOpacity = 0.0f;
     if (self.chipSelected) {
-        self.glassBackground.customTintColor = [accent colorWithAlphaComponent:0.24];
-        self.glassBackground.customBorderColor = accent;
-        self.titleLabel.textColor = spec.isDark ? [UIColor whiteColor] : accent;
+        self.glassBackground.customTintColor = [accent colorWithAlphaComponent:0.14];
+        self.glassBackground.customBorderColor = [accent colorWithAlphaComponent:0.65];
+        self.titleLabel.textColor = accent;
         self.subtitleLabel.textColor = accent;
         self.iconView.tintColor = accent;
-        self.layer.shadowColor = accent.CGColor;
-        self.layer.shadowOpacity = 0.30f;
-        self.layer.shadowRadius = 7.0;
-        self.layer.shadowOffset = CGSizeZero;
     } else {
         self.glassBackground.customTintColor = nil;
-        self.glassBackground.customBorderColor = nil;
+        self.glassBackground.customBorderColor = [UIColor clearColor];
         self.titleLabel.textColor = spec.primaryTextColor;
         self.subtitleLabel.textColor = spec.secondaryTextColor;
         self.iconView.tintColor = spec.secondaryTextColor;
-        self.layer.shadowOpacity = 0.0f;
     }
     [self.glassBackground applyTheme];
 }
@@ -651,8 +647,7 @@
     }
 
     self.conversionTrack.backgroundColor = trackColor;
-    UIColor *violet = [UIColor colorWithRed:0.58 green:0.32 blue:1.0 alpha:1.0];
-    self.conversionGradient.colors = @[(__bridge id)violet.CGColor, (__bridge id)spec.mediaGlowColor.CGColor];
+    self.conversionGradient.colors = @[(__bridge id)spec.accentColor.CGColor, (__bridge id)spec.secondaryAccentColor.CGColor];
 }
 
 @end
@@ -660,8 +655,6 @@
 #pragma mark - PDMGlassSheetViewController
 
 @interface PDMGlassSheetViewController ()
-@property (nonatomic, strong) UIVisualEffectView *backgroundBlur;
-@property (nonatomic, strong) UIView *backgroundTint;
 @property (nonatomic, strong) UIView *headerContainer;
 @property (nonatomic, strong) UIImageView *headerIcon;
 @property (nonatomic, strong) UILabel *headerTitleLabel;
@@ -707,7 +700,7 @@
             ? UISheetPresentationControllerDetentIdentifierLarge
             : (self.allowsMediumDetent ? UISheetPresentationControllerDetentIdentifierMedium : UISheetPresentationControllerDetentIdentifierLarge);
         sheet.prefersGrabberVisible = YES;
-        sheet.preferredCornerRadius = 28.0;
+        sheet.preferredCornerRadius = 24.0;
         sheet.prefersScrollingExpandsWhenScrolledToEdge = YES;
     }
 }
@@ -719,15 +712,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor clearColor];
-
-    self.backgroundBlur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
-    self.backgroundBlur.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.backgroundBlur];
-
-    self.backgroundTint = [[UIView alloc] init];
-    self.backgroundTint.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.backgroundTint];
+    self.view.backgroundColor = [PDMThemeManager sharedManager].currentSpec.canvasColor;
 
     self.headerContainer = [[UIView alloc] init];
     self.headerContainer.translatesAutoresizingMaskIntoConstraints = NO;
@@ -745,18 +730,19 @@
     [self.headerContainer addSubview:titleStack];
 
     self.headerTitleLabel = [[UILabel alloc] init];
-    self.headerTitleLabel.font = [[PDMThemeManager sharedManager] displayFontOfSize:20.0 weight:UIFontWeightBold];
+    self.headerTitleLabel.font = [[PDMThemeManager sharedManager] displayFontOfSize:18.5 weight:UIFontWeightSemibold];
     self.headerTitleLabel.numberOfLines = 1;
     [titleStack addArrangedSubview:self.headerTitleLabel];
 
     self.headerSubtitleLabel = [[UILabel alloc] init];
-    self.headerSubtitleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:12.5 weight:UIFontWeightMedium];
+    self.headerSubtitleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:12.5 weight:UIFontWeightRegular];
     self.headerSubtitleLabel.numberOfLines = 2;
     [titleStack addArrangedSubview:self.headerSubtitleLabel];
 
     self.closeButton = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"xmark"];
-    self.closeButton.horizontalPadding = 10.0;
-    self.closeButton.verticalPadding = 10.0;
+    self.closeButton.symbolPointSize = 13.0;
+    self.closeButton.horizontalPadding = 9.0;
+    self.closeButton.verticalPadding = 9.0;
     self.closeButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.closeButton addTarget:self action:@selector(handleCloseTap) forControlEvents:UIControlEventTouchUpInside];
     [self.headerContainer addSubview:self.closeButton];
@@ -782,7 +768,7 @@
     self.bottomBarContainer.hidden = YES;
     [self.view addSubview:self.bottomBarContainer];
 
-    self.bottomBarGlass = [[PDMGlassView alloc] initWithCornerRadius:22.0 elevated:YES];
+    self.bottomBarGlass = [[PDMGlassView alloc] initWithCornerRadius:18.0 elevated:YES];
     self.bottomBarGlass.translatesAutoresizingMaskIntoConstraints = NO;
     [self.bottomBarContainer addSubview:self.bottomBarGlass];
 
@@ -797,24 +783,14 @@
     self.scrollBottomToBottomBar = [self.scrollView.bottomAnchor constraintEqualToAnchor:self.bottomBarContainer.topAnchor constant:-6.0];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.backgroundBlur.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.backgroundBlur.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.backgroundBlur.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.backgroundBlur.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-
-        [self.backgroundTint.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.backgroundTint.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.backgroundTint.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.backgroundTint.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-
         [self.headerContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16.0],
         [self.headerContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18.0],
         [self.headerContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18.0],
 
         [self.headerIcon.leadingAnchor constraintEqualToAnchor:self.headerContainer.leadingAnchor],
         [self.headerIcon.centerYAnchor constraintEqualToAnchor:self.headerContainer.centerYAnchor],
-        [self.headerIcon.widthAnchor constraintEqualToConstant:28.0],
-        [self.headerIcon.heightAnchor constraintEqualToConstant:28.0],
+        [self.headerIcon.widthAnchor constraintEqualToConstant:24.0],
+        [self.headerIcon.heightAnchor constraintEqualToConstant:24.0],
 
         [titleStack.leadingAnchor constraintEqualToAnchor:self.headerIcon.trailingAnchor constant:10.0],
         [titleStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.closeButton.leadingAnchor constant:-10.0],
@@ -827,7 +803,7 @@
         [self.headerSeparator.topAnchor constraintEqualToAnchor:self.headerContainer.bottomAnchor constant:12.0],
         [self.headerSeparator.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.headerSeparator.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.headerSeparator.heightAnchor constraintEqualToConstant:0.6],
+        [self.headerSeparator.heightAnchor constraintEqualToConstant:0.5],
 
         [self.scrollView.topAnchor constraintEqualToAnchor:self.headerSeparator.bottomAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -867,12 +843,12 @@
     self.headerSubtitleLabel.text = self.sheetSubtitle;
     self.headerSubtitleLabel.hidden = (self.sheetSubtitle.length == 0);
     if (self.sheetSymbolName.length > 0) {
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold];
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightMedium];
         self.headerIcon.image = [UIImage systemImageNamed:self.sheetSymbolName withConfiguration:cfg];
         self.headerIcon.hidden = NO;
     } else {
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold];
-        self.headerIcon.image = [UIImage systemImageNamed:@"sparkles" withConfiguration:cfg];
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightMedium];
+        self.headerIcon.image = [UIImage systemImageNamed:@"slider.horizontal.3" withConfiguration:cfg];
         self.headerIcon.hidden = NO;
     }
 }
@@ -891,8 +867,7 @@
 - (void)applyTheme {
     PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
     self.overrideUserInterfaceStyle = spec.interfaceStyle;
-    self.backgroundBlur.effect = [UIBlurEffect effectWithStyle:spec.blurStyle];
-    self.backgroundTint.backgroundColor = [spec.canvasColor colorWithAlphaComponent:spec.isOLED ? 0.92 : 0.78];
+    self.view.backgroundColor = spec.canvasColor;
     self.headerTitleLabel.textColor = spec.primaryTextColor;
     self.headerSubtitleLabel.textColor = spec.secondaryTextColor;
     self.headerIcon.tintColor = self.sheetSymbolTint ?: spec.accentColor;

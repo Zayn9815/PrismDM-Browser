@@ -384,6 +384,12 @@ static uint32_t PDMReadLE32(const uint8_t *p) {
 }
 
 - (void)scanLibraryFiles {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self scanLibraryFiles];
+        });
+        return;
+    }
     [self.allFiles removeAllObjects];
     NSFileManager *fm = [NSFileManager defaultManager];
     NSArray<NSString *> *folders = @[@"Videos", @"Audio", @"Documents", @"Archives", @"Images", @".PrivateVault"];

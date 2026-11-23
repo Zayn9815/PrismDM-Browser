@@ -3,6 +3,7 @@
 #import "PDMTranscoder.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
+#import <CoreVideo/CoreVideo.h>
 #import <CommonCrypto/CommonCryptor.h>
 #import <math.h>
 #import <fcntl.h>
@@ -466,11 +467,68 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
     return self;
 }
 
+static NSString *PDMDetectContainerExtensionForURL(NSURL *fileURL) {
+    NSString *ext = fileURL.pathExtension.lowercaseString;
+    NSSet<NSString *> *avKnown = [NSSet setWithObjects:@"mp4", @"m4v", @"mov", @"m4a", @"mp3", @"aac", @"wav", @"flac", @"aif", @"aiff", @"caf", @"3gp", @"ts", nil];
+    if (ext.length > 0 && [avKnown containsObject:ext]) {
+        return ext;
+    }
+
+    uint8_t header[16];
+    memset(header, 0, sizeof(header));
+    int fd = open(fileURL.fileSystemRepresentation, O_RDONLY);
+    ssize_t n = 0;
+    if (fd >= 0) {
+        n = read(fd, header, sizeof(header));
+        close(fd);
+    }
+    if (n >= 12) {
+        if (header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p') {
+            if (header[8] == 'q' && header[9] == 't') return @"mov";
+            if (header[8] == 'M' && header[9] == '4' && header[10] == 'A') return @"m4a";
+            if (header[8] == 'M' && header[9] == '4' && header[10] == 'V') return @"m4v";
+            return @"mp4";
+        }
+        if (header[0] == 'f' && header[1] == 'L' && header[2] == 'a' && header[3] == 'C') return @"flac";
+        if (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
+            header[8] == 'W' && header[9] == 'A' && header[10] == 'V' && header[11] == 'E') return @"wav";
+        if (header[0] == 'I' && header[1] == 'D' && header[2] == '3') return @"mp3";
+        if (header[0] == 0xFF && (header[1] & 0xE0) == 0xE0) return @"mp3";
+    }
+    return @"mp4";
+}
+
+static NSURL *PDMCreateStagedMediaURLIfNeeded(NSURL *inputURL, BOOL *outShouldCleanup) {
+    if (outShouldCleanup) *outShouldCleanup = NO;
+    NSString *curExt = inputURL.pathExtension.lowercaseString;
+    NSSet<NSString *> *avKnown = [NSSet setWithObjects:@"mp4", @"m4v", @"mov", @"m4a", @"mp3", @"aac", @"wav", @"flac", @"aif", @"aiff", @"caf", @"3gp", nil];
+    if (curExt.length > 0 && [avKnown containsObject:curExt]) {
+        return inputURL;
+    }
+
+    NSString *detectedExt = PDMDetectContainerExtensionForURL(inputURL);
+    NSString *tmpName = [NSString stringWithFormat:@"pdm_stage_%@.%@", [NSUUID UUID].UUIDString, detectedExt];
+    NSURL *stagedURL = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:tmpName]];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm removeItemAtURL:stagedURL error:nil];
+
+    NSError *linkErr = nil;
+    if ([fm createSymbolicLinkAtURL:stagedURL withDestinationURL:inputURL error:&linkErr]) {
+        if (outShouldCleanup) *outShouldCleanup = YES;
+        return stagedURL;
+    }
+    if ([fm linkItemAtURL:inputURL toURL:stagedURL error:nil] || [fm copyItemAtURL:inputURL toURL:stagedURL error:nil]) {
+        if (outShouldCleanup) *outShouldCleanup = YES;
+        return stagedURL;
+    }
+    return inputURL;
+}
+
 - (BOOL)needsConversionForInputURL:(NSURL *)inputURL config:(PDMMediaFormatConfig *)config {
     if (!config || config.outputMode == PDMOutputModeOriginal) {
         return NO;
     }
-    NSString *srcExt = inputURL.pathExtension.lowercaseString;
+    NSString *srcExt = PDMDetectContainerExtensionForURL(inputURL);
     NSString *dstExt = [config targetFileExtension].lowercaseString;
 
     if (config.outputMode == PDMOutputModeAudioOnly) {
@@ -486,14 +544,17 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
         return YES;
     }
 
-    // Video mode
-    if (config.targetResolution != PDMTargetResolutionOriginal || config.qualityPreset != PDMVideoQualityPresetHigh) {
-        return YES;
-    }
-    if (![srcExt isEqualToString:dstExt]) {
-        return YES;
-    }
-    if (config.videoFormat == PDMVideoFormatMP4HEVC || config.videoFormat == PDMVideoFormatMOVHEVC) {
+    // Explicit Video Format conversion mode: always convert unless container, codec, resolution & quality are untouched
+    if (config.outputMode == PDMOutputModeVideo) {
+        if (config.targetResolution != PDMTargetResolutionOriginal || config.qualityPreset != PDMVideoQualityPresetHigh) {
+            return YES;
+        }
+        if (![srcExt isEqualToString:dstExt]) {
+            return YES;
+        }
+        if (config.videoFormat == PDMVideoFormatMP4HEVC || config.videoFormat == PDMVideoFormatMOVHEVC) {
+            return YES;
+        }
         return YES;
     }
     return NO;
@@ -515,9 +576,17 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
             return;
         }
 
+        if (![[NSFileManager defaultManager] fileExistsAtPath:inputURL.path]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(NO, nil, [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-404 userInfo:@{NSLocalizedDescriptionKey: @"Source media file not found."}]);
+            });
+            return;
+        }
+
         if (![self needsConversionForInputURL:inputURL config:cfgCopy]) {
             NSError *copyErr = nil;
             if (![inputURL.path isEqualToString:outputURL.path]) {
+                [[NSFileManager defaultManager] createDirectoryAtURL:[outputURL URLByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
                 [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
                 [[NSFileManager defaultManager] copyItemAtURL:inputURL toURL:outputURL error:&copyErr];
             }
@@ -528,18 +597,31 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
             return;
         }
 
+        [[NSFileManager defaultManager] createDirectoryAtURL:[outputURL URLByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
         [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+
+        BOOL shouldCleanupStaged = NO;
+        NSURL *readableInputURL = PDMCreateStagedMediaURLIfNeeded(inputURL, &shouldCleanupStaged);
+
+        void (^wrappedCompletion)(BOOL, NSURL * _Nullable, NSError * _Nullable) = ^(BOOL success, NSURL * _Nullable finalURL, NSError * _Nullable error) {
+            if (shouldCleanupStaged) {
+                [[NSFileManager defaultManager] removeItemAtURL:readableInputURL error:nil];
+            }
+            if (completion) {
+                completion(success, finalURL, error);
+            }
+        };
 
         if (cfgCopy.outputMode == PDMOutputModeAudioOnly) {
             if (cfgCopy.audioFormat == PDMAudioFormatMP3) {
-                [self encodeMP3FromInputURL:inputURL outputURL:outputURL config:cfgCopy job:job progress:progressHandler completion:completion];
+                [self encodeMP3FromInputURL:readableInputURL outputURL:outputURL config:cfgCopy job:job progress:progressHandler completion:wrappedCompletion];
             } else {
-                [self encodeAudioWithExtAudioFileFromInputURL:inputURL outputURL:outputURL config:cfgCopy job:job progress:progressHandler completion:completion];
+                [self encodeAudioWithExtAudioFileFromInputURL:readableInputURL outputURL:outputURL config:cfgCopy job:job progress:progressHandler completion:wrappedCompletion];
             }
             return;
         }
 
-        [self transcodeVideoFromInputURL:inputURL outputURL:outputURL config:cfgCopy job:job progress:progressHandler completion:completion];
+        [self transcodeVideoFromInputURL:readableInputURL outputURL:outputURL config:cfgCopy job:job progress:progressHandler completion:wrappedCompletion];
     });
 
     return job;
@@ -551,7 +633,7 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
                           job:(PDMTranscodeJob *)job
                      progress:(nullable void (^)(double fraction))progressHandler
                    completion:(void (^)(BOOL success, NSURL * _Nullable finalURL, NSError * _Nullable error))completion {
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:inputURL options:nil];
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:inputURL options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     NSArray<AVAssetTrack *> *audioTracks = [asset tracksWithMediaType:AVMediaTypeAudio];
@@ -710,7 +792,7 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
                                             job:(PDMTranscodeJob *)job
                                        progress:(nullable void (^)(double fraction))progressHandler
                                      completion:(void (^)(BOOL success, NSURL * _Nullable finalURL, NSError * _Nullable error))completion {
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:inputURL options:nil];
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:inputURL options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     NSArray<AVAssetTrack *> *audioTracks = [asset tracksWithMediaType:AVMediaTypeAudio];
@@ -749,6 +831,13 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
     };
 
     AVAssetReaderTrackOutput *output = [[AVAssetReaderTrackOutput alloc] initWithTrack:track outputSettings:pcmSettings];
+    if (![reader canAddOutput:output]) {
+        NSError *err = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-202 userInfo:@{NSLocalizedDescriptionKey: @"Unable to configure audio reader."}];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(NO, nil, err);
+        });
+        return;
+    }
     [reader addOutput:output];
     if (![reader startReading]) {
         NSError *err = reader.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-202 userInfo:@{NSLocalizedDescriptionKey: @"Audio reader failed."}];
@@ -874,82 +963,465 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
     });
 }
 
+- (AVFileType)fileTypeForVideoConfig:(PDMMediaFormatConfig *)config {
+    if (config.videoFormat == PDMVideoFormatMOVH264 || config.videoFormat == PDMVideoFormatMOVHEVC) {
+        return AVFileTypeQuickTimeMovie;
+    } else if (config.videoFormat == PDMVideoFormatM4VH264) {
+        return AVFileTypeAppleM4V;
+    }
+    return AVFileTypeMPEG4;
+}
+
 - (void)transcodeVideoFromInputURL:(NSURL *)inputURL
                          outputURL:(NSURL *)outputURL
                             config:(PDMMediaFormatConfig *)config
                                job:(PDMTranscodeJob *)job
                           progress:(nullable void (^)(double fraction))progressHandler
                         completion:(void (^)(BOOL success, NSURL * _Nullable finalURL, NSError * _Nullable error))completion {
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:inputURL options:nil];
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:inputURL options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     NSArray<AVAssetTrack *> *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
     NSArray<AVAssetTrack *> *audioTracks = [asset tracksWithMediaType:AVMediaTypeAudio];
-    CMTime assetDuration = asset.duration;
+    double durationSec = CMTimeGetSeconds(asset.duration);
 #pragma clang diagnostic pop
 
-    AVMutableComposition *composition = [AVMutableComposition composition];
-    CMTimeRange fullRange = CMTimeRangeMake(kCMTimeZero, assetDuration);
-
-    if (videoTracks.count > 0) {
-        AVAssetTrack *vt = videoTracks.firstObject;
-        AVMutableCompositionTrack *compV = [composition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-        [compV insertTimeRange:fullRange ofTrack:vt atTime:kCMTimeZero error:nil];
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        compV.preferredTransform = vt.preferredTransform;
-#pragma clang diagnostic pop
+    if (videoTracks.count == 0) {
+        NSError *err = [NSError errorWithDomain:kPDMTranscoderErrorDomain
+                                           code:-301
+                                       userInfo:@{NSLocalizedDescriptionKey: @"No supported video track found in this file."}];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(NO, nil, err);
+        });
+        return;
     }
+
+    AVAssetTrack *videoTrack = videoTracks.firstObject;
+    AVAssetTrack *audioTrack = nil;
     if (audioTracks.count > 0) {
         NSInteger aIdx = MAX(0, MIN((NSInteger)audioTracks.count - 1, config.selectedAudioTrackIndex));
-        AVAssetTrack *at = audioTracks[(NSUInteger)aIdx];
+        audioTrack = audioTracks[(NSUInteger)aIdx];
+    }
+
+    if (!isfinite(durationSec) || durationSec <= 0.0) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        durationSec = CMTimeGetSeconds(videoTrack.timeRange.duration);
+#pragma clang diagnostic pop
+    }
+
+    NSError *rwErr = nil;
+    BOOL rwOK = [self runReaderWriterTranscodeForAsset:asset
+                                            videoTrack:videoTrack
+                                            audioTrack:audioTrack
+                                           durationSec:durationSec
+                                             outputURL:outputURL
+                                                config:config
+                                                   job:job
+                                              progress:progressHandler
+                                                 error:&rwErr];
+    if (rwOK) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (progressHandler) progressHandler(1.0);
+            if (completion) completion(YES, outputURL, nil);
+        });
+        return;
+    }
+
+    if (job.isCancelled) {
+        [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(NO, nil, [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-999 userInfo:@{NSLocalizedDescriptionKey: @"Cancelled"}]);
+        });
+        return;
+    }
+
+    // Fallback to validated AVAssetExportSession if Reader/Writer could not handle this source
+    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+    NSError *expErr = nil;
+    BOOL expOK = [self runExportSessionFallbackForAsset:asset
+                                             videoTrack:videoTrack
+                                             audioTrack:audioTrack
+                                              outputURL:outputURL
+                                                 config:config
+                                                    job:job
+                                               progress:progressHandler
+                                                  error:&expErr];
+    NSError *finalErr = expOK ? nil : (expErr ?: rwErr ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-302 userInfo:@{NSLocalizedDescriptionKey: @"Video conversion failed."}]);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (expOK && progressHandler) progressHandler(1.0);
+        if (completion) completion(expOK, expOK ? outputURL : nil, finalErr);
+    });
+}
+
+- (BOOL)runReaderWriterTranscodeForAsset:(AVURLAsset *)asset
+                              videoTrack:(AVAssetTrack *)videoTrack
+                              audioTrack:(nullable AVAssetTrack *)audioTrack
+                             durationSec:(double)durationSec
+                               outputURL:(NSURL *)outputURL
+                                  config:(PDMMediaFormatConfig *)config
+                                     job:(PDMTranscodeJob *)job
+                                progress:(nullable void (^)(double fraction))progressHandler
+                                   error:(NSError **)outError {
+    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+
+    NSError *readerErr = nil;
+    AVAssetReader *reader = [[AVAssetReader alloc] initWithAsset:asset error:&readerErr];
+    if (!reader || readerErr) {
+        if (outError) *outError = readerErr;
+        return NO;
+    }
+
+    AVFileType fileType = [self fileTypeForVideoConfig:config];
+    NSError *writerErr = nil;
+    AVAssetWriter *writer = [[AVAssetWriter alloc] initWithURL:outputURL fileType:fileType error:&writerErr];
+    if (!writer || writerErr) {
+        if (outError) *outError = writerErr;
+        return NO;
+    }
+    writer.shouldOptimizeForNetworkUse = YES;
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CGSize natSize = videoTrack.naturalSize;
+    CGAffineTransform preferredTransform = videoTrack.preferredTransform;
+#pragma clang diagnostic pop
+
+    double natW = fabs((double)natSize.width);
+    double natH = fabs((double)natSize.height);
+    if (natW < 16.0 || natH < 16.0) {
+        natW = 1280.0;
+        natH = 720.0;
+    }
+
+    double maxLong = 0.0;
+    double maxShort = 0.0;
+    switch (config.targetResolution) {
+        case PDMTargetResolution1080p: maxLong = 1920.0; maxShort = 1080.0; break;
+        case PDMTargetResolution720p:  maxLong = 1280.0; maxShort = 720.0; break;
+        case PDMTargetResolution480p:  maxLong = 854.0;  maxShort = 480.0; break;
+        case PDMTargetResolutionOriginal:
+        default: break;
+    }
+
+    double scale = 1.0;
+    if (maxLong > 0.0 && maxShort > 0.0) {
+        double major = MAX(natW, natH);
+        double minor = MIN(natW, natH);
+        scale = MIN(1.0, MIN(maxLong / major, maxShort / minor));
+    }
+
+    NSInteger outW = MAX(16, (((NSInteger)llround(natW * scale)) & ~1));
+    NSInteger outH = MAX(16, (((NSInteger)llround(natH * scale)) & ~1));
+
+    BOOL useHEVC = (config.videoFormat == PDMVideoFormatMP4HEVC || config.videoFormat == PDMVideoFormatMOVHEVC);
+    double pixelRatio = MAX(0.15, ((double)outW * (double)outH) / (1920.0 * 1080.0));
+    double baseBitrate = 8000000.0;
+    if (config.qualityPreset == PDMVideoQualityPresetCompact) {
+        baseBitrate = useHEVC ? 1800000.0 : 2500000.0;
+    } else if (config.qualityPreset == PDMVideoQualityPresetBalanced) {
+        baseBitrate = useHEVC ? 3500000.0 : 4800000.0;
+    } else {
+        baseBitrate = useHEVC ? 6000000.0 : 8500000.0;
+    }
+    NSInteger targetBitrate = MAX(450000, (NSInteger)llround(baseBitrate * pixelRatio));
+
+    NSDictionary<NSString *, id> *videoReaderSettings = @{
+        (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+    };
+    AVAssetReaderTrackOutput *videoOutput = [[AVAssetReaderTrackOutput alloc] initWithTrack:videoTrack outputSettings:videoReaderSettings];
+    videoOutput.alwaysCopiesSampleData = NO;
+    if (![reader canAddOutput:videoOutput]) {
+        if (outError) *outError = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-310 userInfo:@{NSLocalizedDescriptionKey: @"Cannot decode video stream."}];
+        return NO;
+    }
+    [reader addOutput:videoOutput];
+
+    NSMutableDictionary<NSString *, id> *compProps = [NSMutableDictionary dictionaryWithDictionary:@{
+        AVVideoAverageBitRateKey: @(targetBitrate)
+    }];
+    if (!useHEVC) {
+        compProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel;
+    }
+    NSDictionary<NSString *, id> *videoWriterSettings = @{
+        AVVideoCodecKey: (useHEVC ? AVVideoCodecTypeHEVC : AVVideoCodecTypeH264),
+        AVVideoWidthKey: @(outW),
+        AVVideoHeightKey: @(outH),
+        AVVideoCompressionPropertiesKey: compProps
+    };
+
+    AVAssetWriterInput *videoInput = nil;
+    if ([writer canApplyOutputSettings:videoWriterSettings forMediaType:AVMediaTypeVideo]) {
+        videoInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:videoWriterSettings];
+    } else if (useHEVC) {
+        // Fallback to H.264 if HEVC encoder is not available for this container/device
+        NSDictionary<NSString *, id> *h264Settings = @{
+            AVVideoCodecKey: AVVideoCodecTypeH264,
+            AVVideoWidthKey: @(outW),
+            AVVideoHeightKey: @(outH),
+            AVVideoCompressionPropertiesKey: @{
+                AVVideoAverageBitRateKey: @(targetBitrate),
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+            }
+        };
+        if ([writer canApplyOutputSettings:h264Settings forMediaType:AVMediaTypeVideo]) {
+            videoInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:h264Settings];
+        }
+    }
+    if (!videoInput || ![writer canAddInput:videoInput]) {
+        if (outError) *outError = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-311 userInfo:@{NSLocalizedDescriptionKey: @"Cannot configure video encoder."}];
+        return NO;
+    }
+    videoInput.expectsMediaDataInRealTime = NO;
+    videoInput.transform = preferredTransform;
+    [writer addInput:videoInput];
+
+    AVAssetReaderTrackOutput *audioOutput = nil;
+    AVAssetWriterInput *audioInput = nil;
+    if (audioTrack) {
+        NSDictionary<NSString *, id> *pcmSettings = @{
+            AVFormatIDKey: @(kAudioFormatLinearPCM),
+            AVSampleRateKey: @44100,
+            AVNumberOfChannelsKey: @2,
+            AVLinearPCMBitDepthKey: @16,
+            AVLinearPCMIsBigEndianKey: @NO,
+            AVLinearPCMIsFloatKey: @NO,
+            AVLinearPCMIsNonInterleaved: @NO
+        };
+        AVAssetReaderTrackOutput *candAudioOut = [[AVAssetReaderTrackOutput alloc] initWithTrack:audioTrack outputSettings:pcmSettings];
+        candAudioOut.alwaysCopiesSampleData = NO;
+
+        NSInteger aBitrate = MAX(64, MIN(320, config.audioBitrateKbps)) * 1000;
+        NSDictionary<NSString *, id> *aacSettings = @{
+            AVFormatIDKey: @(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: @44100,
+            AVNumberOfChannelsKey: @2,
+            AVEncoderBitRateKey: @(aBitrate)
+        };
+        if ([reader canAddOutput:candAudioOut] && [writer canApplyOutputSettings:aacSettings forMediaType:AVMediaTypeAudio]) {
+            AVAssetWriterInput *candAudioIn = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio outputSettings:aacSettings];
+            candAudioIn.expectsMediaDataInRealTime = NO;
+            if ([writer canAddInput:candAudioIn]) {
+                [reader addOutput:candAudioOut];
+                [writer addInput:candAudioIn];
+                audioOutput = candAudioOut;
+                audioInput = candAudioIn;
+            }
+        }
+    }
+
+    if (![reader startReading]) {
+        if (outError) *outError = reader.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-312 userInfo:@{NSLocalizedDescriptionKey: @"Failed to start media reader."}];
+        return NO;
+    }
+    if (![writer startWriting]) {
+        [reader cancelReading];
+        if (outError) *outError = writer.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-313 userInfo:@{NSLocalizedDescriptionKey: @"Failed to start media writer."}];
+        return NO;
+    }
+    [writer startSessionAtSourceTime:kCMTimeZero];
+
+    dispatch_group_t group = dispatch_group_create();
+    dispatch_queue_t vQueue = dispatch_queue_create("com.prismdm.transcode.video", DISPATCH_QUEUE_SERIAL);
+    __block BOOL videoFinished = NO;
+    __block double lastReportedProgress = 0.0;
+
+    dispatch_group_enter(group);
+    [videoInput requestMediaDataWhenReadyOnQueue:vQueue usingBlock:^{
+        while (videoInput.isReadyForMoreMediaData) {
+            if (videoFinished) return;
+            if (job.isCancelled || writer.status == AVAssetWriterStatusFailed || writer.status == AVAssetWriterStatusCancelled) {
+                videoFinished = YES;
+                [videoInput markAsFinished];
+                dispatch_group_leave(group);
+                return;
+            }
+            CMSampleBufferRef sb = [videoOutput copyNextSampleBuffer];
+            if (sb) {
+                CMTime pts = CMSampleBufferGetPresentationTimeStamp(sb);
+                BOOL appended = [videoInput appendSampleBuffer:sb];
+                CFRelease(sb);
+                if (!appended) {
+                    videoFinished = YES;
+                    [videoInput markAsFinished];
+                    dispatch_group_leave(group);
+                    return;
+                }
+                if (progressHandler && durationSec > 0.1 && CMTIME_IS_NUMERIC(pts)) {
+                    double frac = MIN(0.98, MAX(0.0, CMTimeGetSeconds(pts) / durationSec));
+                    if (frac - lastReportedProgress >= 0.02) {
+                        lastReportedProgress = frac;
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            progressHandler(frac);
+                        });
+                    }
+                }
+            } else {
+                videoFinished = YES;
+                [videoInput markAsFinished];
+                dispatch_group_leave(group);
+                return;
+            }
+        }
+    }];
+
+    if (audioInput && audioOutput) {
+        dispatch_queue_t aQueue = dispatch_queue_create("com.prismdm.transcode.audio", DISPATCH_QUEUE_SERIAL);
+        __block BOOL audioFinished = NO;
+        dispatch_group_enter(group);
+        [audioInput requestMediaDataWhenReadyOnQueue:aQueue usingBlock:^{
+            while (audioInput.isReadyForMoreMediaData) {
+                if (audioFinished) return;
+                if (job.isCancelled || writer.status == AVAssetWriterStatusFailed || writer.status == AVAssetWriterStatusCancelled) {
+                    audioFinished = YES;
+                    [audioInput markAsFinished];
+                    dispatch_group_leave(group);
+                    return;
+                }
+                CMSampleBufferRef sb = [audioOutput copyNextSampleBuffer];
+                if (sb) {
+                    BOOL appended = [audioInput appendSampleBuffer:sb];
+                    CFRelease(sb);
+                    if (!appended) {
+                        audioFinished = YES;
+                        [audioInput markAsFinished];
+                        dispatch_group_leave(group);
+                        return;
+                    }
+                } else {
+                    audioFinished = YES;
+                    [audioInput markAsFinished];
+                    dispatch_group_leave(group);
+                    return;
+                }
+            }
+        }];
+    }
+
+    while (dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC))) != 0) {
+        if (job.isCancelled) {
+            [reader cancelReading];
+            [writer cancelWriting];
+        }
+    }
+
+    if (job.isCancelled) {
+        [reader cancelReading];
+        [writer cancelWriting];
+        [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+        if (outError) *outError = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-999 userInfo:@{NSLocalizedDescriptionKey: @"Cancelled"}];
+        return NO;
+    }
+
+    if (reader.status == AVAssetReaderStatusFailed) {
+        [writer cancelWriting];
+        [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+        if (outError) *outError = reader.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-314 userInfo:@{NSLocalizedDescriptionKey: @"Reader failed during conversion."}];
+        return NO;
+    }
+
+    if (writer.status == AVAssetWriterStatusFailed || writer.status == AVAssetWriterStatusCancelled) {
+        [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+        if (outError) *outError = writer.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-315 userInfo:@{NSLocalizedDescriptionKey: @"Writer failed during conversion."}];
+        return NO;
+    }
+
+    dispatch_semaphore_t finishSem = dispatch_semaphore_create(0);
+    [writer finishWritingWithCompletionHandler:^{
+        dispatch_semaphore_signal(finishSem);
+    }];
+    dispatch_semaphore_wait(finishSem, DISPATCH_TIME_FOREVER);
+
+    if (writer.status == AVAssetWriterStatusCompleted) {
+        NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:outputURL.path error:nil];
+        if ([attrs[NSFileSize] longLongValue] > 0) {
+            return YES;
+        }
+    }
+
+    if (outError) *outError = writer.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-316 userInfo:@{NSLocalizedDescriptionKey: @"Video conversion did not complete."}];
+    [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+    return NO;
+}
+
+- (BOOL)runExportSessionFallbackForAsset:(AVURLAsset *)asset
+                              videoTrack:(AVAssetTrack *)videoTrack
+                              audioTrack:(nullable AVAssetTrack *)audioTrack
+                               outputURL:(NSURL *)outputURL
+                                  config:(PDMMediaFormatConfig *)config
+                                     job:(PDMTranscodeJob *)job
+                                progress:(nullable void (^)(double fraction))progressHandler
+                                   error:(NSError **)outError {
+    AVMutableComposition *composition = [AVMutableComposition composition];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    CMTimeRange vRange = videoTrack.timeRange;
+    if (!CMTIME_IS_NUMERIC(vRange.duration) || CMTIME_COMPARE_INLINE(vRange.duration, <=, kCMTimeZero)) {
+        vRange = CMTimeRangeMake(kCMTimeZero, asset.duration);
+    }
+    AVMutableCompositionTrack *compV = [composition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+    NSError *insErr = nil;
+    [compV insertTimeRange:vRange ofTrack:videoTrack atTime:kCMTimeZero error:&insErr];
+    compV.preferredTransform = videoTrack.preferredTransform;
+
+    if (audioTrack) {
+        CMTimeRange aRange = audioTrack.timeRange;
+        if (!CMTIME_IS_NUMERIC(aRange.duration) || CMTIME_COMPARE_INLINE(aRange.duration, <=, kCMTimeZero)) {
+            aRange = vRange;
+        }
+        CMTime useDur = CMTimeMinimum(vRange.duration, aRange.duration);
         AVMutableCompositionTrack *compA = [composition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-        [compA insertTimeRange:fullRange ofTrack:at atTime:kCMTimeZero error:nil];
+        [compA insertTimeRange:CMTimeRangeMake(aRange.start, useDur) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
     }
 
     BOOL useHEVC = (config.videoFormat == PDMVideoFormatMP4HEVC || config.videoFormat == PDMVideoFormatMOVHEVC);
-    NSString *presetName = AVAssetExportPresetHighestQuality;
-    if (useHEVC) {
-        switch (config.targetResolution) {
-            case PDMTargetResolution1080p: presetName = AVAssetExportPresetHEVC1920x1080; break;
-            case PDMTargetResolution720p: presetName = AVAssetExportPreset1280x720; break;
-            case PDMTargetResolution480p: presetName = AVAssetExportPreset640x480; break;
-            case PDMTargetResolutionOriginal:
-            default: presetName = AVAssetExportPresetHEVCHighestQuality; break;
-        }
-    } else {
-        switch (config.targetResolution) {
-            case PDMTargetResolution1080p: presetName = AVAssetExportPreset1920x1080; break;
-            case PDMTargetResolution720p: presetName = AVAssetExportPreset1280x720; break;
-            case PDMTargetResolution480p: presetName = AVAssetExportPreset640x480; break;
-            case PDMTargetResolutionOriginal:
-            default:
-                if (config.qualityPreset == PDMVideoQualityPresetCompact) {
-                    presetName = AVAssetExportPresetMediumQuality;
-                } else if (config.qualityPreset == PDMVideoQualityPresetBalanced) {
-                    presetName = AVAssetExportPreset1280x720;
-                } else {
-                    presetName = AVAssetExportPresetHighestQuality;
-                }
-                break;
-        }
+    NSString *presetName = useHEVC ? AVAssetExportPresetHEVCHighestQuality : AVAssetExportPresetHighestQuality;
+    switch (config.targetResolution) {
+        case PDMTargetResolution1080p:
+            presetName = useHEVC ? AVAssetExportPresetHEVC1920x1080 : AVAssetExportPreset1920x1080;
+            break;
+        case PDMTargetResolution720p:
+            presetName = AVAssetExportPreset1280x720;
+            break;
+        case PDMTargetResolution480p:
+            presetName = AVAssetExportPreset640x480;
+            break;
+        case PDMTargetResolutionOriginal:
+        default:
+            if (!useHEVC && config.qualityPreset == PDMVideoQualityPresetCompact) {
+                presetName = AVAssetExportPresetMediumQuality;
+            }
+            break;
     }
 
-    AVFileType fileType = AVFileTypeMPEG4;
-    if (config.videoFormat == PDMVideoFormatMOVH264 || config.videoFormat == PDMVideoFormatMOVHEVC) {
-        fileType = AVFileTypeQuickTimeMovie;
-    } else if (config.videoFormat == PDMVideoFormatM4VH264) {
-        fileType = AVFileTypeAppleM4V;
+    NSArray<NSString *> *compatible = [AVAssetExportSession exportPresetsCompatibleWithAsset:composition];
+    if (![compatible containsObject:presetName]) {
+        presetName = [compatible containsObject:AVAssetExportPresetHighestQuality]
+            ? AVAssetExportPresetHighestQuality
+            : (compatible.firstObject ?: AVAssetExportPresetHighestQuality);
     }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     AVAssetExportSession *exporter = [[AVAssetExportSession alloc] initWithAsset:composition presetName:presetName];
     if (!exporter) {
-        exporter = [[AVAssetExportSession alloc] initWithAsset:composition presetName:AVAssetExportPresetHighestQuality];
+        if (outError) *outError = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-320 userInfo:@{NSLocalizedDescriptionKey: @"Export session unavailable for this video."}];
+        return NO;
     }
+
+    AVFileType desiredType = [self fileTypeForVideoConfig:config];
+    NSArray<AVFileType> *supportedTypes = exporter.supportedFileTypes;
+    AVFileType chosenType = desiredType;
+    if (supportedTypes.count > 0 && ![supportedTypes containsObject:desiredType]) {
+        if ([supportedTypes containsObject:AVFileTypeMPEG4]) {
+            chosenType = AVFileTypeMPEG4;
+        } else if ([supportedTypes containsObject:AVFileTypeQuickTimeMovie]) {
+            chosenType = AVFileTypeQuickTimeMovie;
+        } else {
+            chosenType = supportedTypes.firstObject;
+        }
+    }
+
     exporter.outputURL = outputURL;
-    exporter.outputFileType = fileType;
+    exporter.outputFileType = chosenType;
     exporter.shouldOptimizeForNetworkUse = YES;
     job.activeExportSession = exporter;
 
@@ -958,10 +1430,9 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
         dispatch_semaphore_signal(doneSem);
     }];
 
-    while (exporter.status == AVAssetExportSessionStatusWaiting || exporter.status == AVAssetExportSessionStatusExporting) {
+    while (dispatch_semaphore_wait(doneSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(160 * NSEC_PER_MSEC))) != 0) {
         if (job.isCancelled) {
             [exporter cancelExport];
-            break;
         }
         double prog = (double)exporter.progress;
         if (progressHandler) {
@@ -969,19 +1440,14 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
                 progressHandler(prog);
             });
         }
-        if (dispatch_semaphore_wait(doneSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(180 * NSEC_PER_MSEC))) == 0) {
-            break;
-        }
     }
 
     BOOL ok = (exporter.status == AVAssetExportSessionStatusCompleted);
-    NSError *exportErr = exporter.error;
+    if (!ok && outError) {
+        *outError = exporter.error ?: [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-321 userInfo:@{NSLocalizedDescriptionKey: @"Export session failed."}];
+    }
 #pragma clang diagnostic pop
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (ok && progressHandler) progressHandler(1.0);
-        if (completion) completion(ok, ok ? outputURL : nil, ok ? nil : exportErr);
-    });
+    return ok;
 }
 
 - (PDMTranscodeJob *)muxVideoURL:(NSURL *)videoURL
@@ -991,8 +1457,15 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
                       completion:(void (^)(BOOL success, NSURL * _Nullable finalURL, NSError * _Nullable error))completion {
     PDMTranscodeJob *job = [[PDMTranscodeJob alloc] init];
     dispatch_async(self.workerQueue, ^{
+        [[NSFileManager defaultManager] createDirectoryAtURL:[outputURL URLByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
         [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
-        AVURLAsset *vAsset = [AVURLAsset URLAssetWithURL:videoURL options:nil];
+
+        BOOL cleanupV = NO;
+        BOOL cleanupA = NO;
+        NSURL *stagedV = PDMCreateStagedMediaURLIfNeeded(videoURL, &cleanupV);
+        NSURL *stagedA = audioURL ? PDMCreateStagedMediaURLIfNeeded(audioURL, &cleanupA) : nil;
+
+        AVURLAsset *vAsset = [AVURLAsset URLAssetWithURL:stagedV options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
         AVMutableComposition *comp = [AVMutableComposition composition];
 
 #pragma clang diagnostic push
@@ -1000,59 +1473,90 @@ static void PDMWriteID3v2Header(int fd, NSString *title) {
         NSArray<AVAssetTrack *> *vTracks = [vAsset tracksWithMediaType:AVMediaTypeVideo];
         CMTime vDur = vAsset.duration;
         if (vTracks.count > 0) {
+            AVAssetTrack *vt = vTracks.firstObject;
+            CMTimeRange vRange = vt.timeRange;
+            if (!CMTIME_IS_NUMERIC(vRange.duration) || CMTIME_COMPARE_INLINE(vRange.duration, <=, kCMTimeZero)) {
+                vRange = CMTimeRangeMake(kCMTimeZero, vDur);
+            }
+            vDur = vRange.duration;
             AVMutableCompositionTrack *compV = [comp addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-            [compV insertTimeRange:CMTimeRangeMake(kCMTimeZero, vDur) ofTrack:vTracks.firstObject atTime:kCMTimeZero error:nil];
+            [compV insertTimeRange:vRange ofTrack:vt atTime:kCMTimeZero error:nil];
+            compV.preferredTransform = vt.preferredTransform;
         }
 
-        if (audioURL) {
-            AVURLAsset *aAsset = [AVURLAsset URLAssetWithURL:audioURL options:nil];
+        if (stagedA) {
+            AVURLAsset *aAsset = [AVURLAsset URLAssetWithURL:stagedA options:@{AVURLAssetPreferPreciseDurationAndTimingKey: @YES}];
             NSArray<AVAssetTrack *> *aTracks = [aAsset tracksWithMediaType:AVMediaTypeAudio];
             CMTime aDur = aAsset.duration;
             if (aTracks.count > 0) {
-                CMTime useDur = (CMTIME_IS_NUMERIC(vDur) && CMTIME_COMPARE_INLINE(vDur, >, kCMTimeZero)) ? CMTimeMinimum(vDur, aDur) : aDur;
+                AVAssetTrack *at = aTracks.firstObject;
+                CMTimeRange aRange = at.timeRange;
+                if (!CMTIME_IS_NUMERIC(aRange.duration) || CMTIME_COMPARE_INLINE(aRange.duration, <=, kCMTimeZero)) {
+                    aRange = CMTimeRangeMake(kCMTimeZero, aDur);
+                }
+                CMTime useDur = (CMTIME_IS_NUMERIC(vDur) && CMTIME_COMPARE_INLINE(vDur, >, kCMTimeZero))
+                    ? CMTimeMinimum(vDur, aRange.duration)
+                    : aRange.duration;
                 AVMutableCompositionTrack *compA = [comp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                [compA insertTimeRange:CMTimeRangeMake(kCMTimeZero, useDur) ofTrack:aTracks.firstObject atTime:kCMTimeZero error:nil];
+                [compA insertTimeRange:CMTimeRangeMake(aRange.start, useDur) ofTrack:at atTime:kCMTimeZero error:nil];
             }
         } else {
             NSArray<AVAssetTrack *> *aTracks = [vAsset tracksWithMediaType:AVMediaTypeAudio];
             if (aTracks.count > 0) {
+                AVAssetTrack *at = aTracks.firstObject;
+                CMTimeRange aRange = at.timeRange;
+                if (!CMTIME_IS_NUMERIC(aRange.duration) || CMTIME_COMPARE_INLINE(aRange.duration, <=, kCMTimeZero)) {
+                    aRange = CMTimeRangeMake(kCMTimeZero, vDur);
+                }
                 AVMutableCompositionTrack *compA = [comp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-                [compA insertTimeRange:CMTimeRangeMake(kCMTimeZero, vDur) ofTrack:aTracks.firstObject atTime:kCMTimeZero error:nil];
+                [compA insertTimeRange:aRange ofTrack:at atTime:kCMTimeZero error:nil];
             }
         }
 
-        AVAssetExportSession *exporter = [[AVAssetExportSession alloc] initWithAsset:comp presetName:AVAssetExportPresetPassthrough];
-        if (!exporter) {
-            exporter = [[AVAssetExportSession alloc] initWithAsset:comp presetName:AVAssetExportPresetHighestQuality];
-        }
-        exporter.outputURL = outputURL;
-        exporter.outputFileType = AVFileTypeMPEG4;
-        exporter.shouldOptimizeForNetworkUse = YES;
-        job.activeExportSession = exporter;
+        BOOL ok = NO;
+        NSError *err = nil;
+        if (comp.tracks.count == 0) {
+            err = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-330 userInfo:@{NSLocalizedDescriptionKey: @"No readable media tracks for muxing."}];
+        } else {
+            AVAssetExportSession *exporter = [[AVAssetExportSession alloc] initWithAsset:comp presetName:AVAssetExportPresetPassthrough];
+            if (!exporter || ![exporter.supportedFileTypes containsObject:AVFileTypeMPEG4]) {
+                exporter = [[AVAssetExportSession alloc] initWithAsset:comp presetName:AVAssetExportPresetHighestQuality];
+            }
+            if (!exporter) {
+                err = [NSError errorWithDomain:kPDMTranscoderErrorDomain code:-331 userInfo:@{NSLocalizedDescriptionKey: @"Unable to initialize muxer."}];
+            } else {
+                AVFileType outType = [exporter.supportedFileTypes containsObject:AVFileTypeMPEG4]
+                    ? AVFileTypeMPEG4
+                    : (exporter.supportedFileTypes.firstObject ?: AVFileTypeMPEG4);
+                exporter.outputURL = outputURL;
+                exporter.outputFileType = outType;
+                exporter.shouldOptimizeForNetworkUse = YES;
+                job.activeExportSession = exporter;
 
-        dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-        [exporter exportAsynchronouslyWithCompletionHandler:^{
-            dispatch_semaphore_signal(sem);
-        }];
+                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+                [exporter exportAsynchronouslyWithCompletionHandler:^{
+                    dispatch_semaphore_signal(sem);
+                }];
 
-        while (exporter.status == AVAssetExportSessionStatusWaiting || exporter.status == AVAssetExportSessionStatusExporting) {
-            if (job.isCancelled) {
-                [exporter cancelExport];
-                break;
-            }
-            double p = (double)exporter.progress;
-            if (progressHandler) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    progressHandler(p);
-                });
-            }
-            if (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(160 * NSEC_PER_MSEC))) == 0) {
-                break;
+                while (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(160 * NSEC_PER_MSEC))) != 0) {
+                    if (job.isCancelled) {
+                        [exporter cancelExport];
+                    }
+                    double p = (double)exporter.progress;
+                    if (progressHandler) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            progressHandler(p);
+                        });
+                    }
+                }
+                ok = (exporter.status == AVAssetExportSessionStatusCompleted);
+                err = exporter.error;
             }
         }
-        BOOL ok = (exporter.status == AVAssetExportSessionStatusCompleted);
-        NSError *err = exporter.error;
 #pragma clang diagnostic pop
+
+        if (cleanupV) [[NSFileManager defaultManager] removeItemAtURL:stagedV error:nil];
+        if (cleanupA && stagedA) [[NSFileManager defaultManager] removeItemAtURL:stagedA error:nil];
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if (ok && progressHandler) progressHandler(1.0);

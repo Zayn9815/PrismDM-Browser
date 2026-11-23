@@ -20,7 +20,7 @@ typedef NS_ENUM(NSInteger, PDMDownloadStatus) {
     PDMDownloadStatusCanceled = 8
 };
 
-@interface PDMDownloadSegment : NSObject
+@interface PDMDownloadSegment : NSObject <NSCopying>
 @property (nonatomic, assign) NSInteger index;
 @property (nonatomic, assign) int64_t startOffset;
 @property (nonatomic, assign) int64_t endOffset;
@@ -31,7 +31,7 @@ typedef NS_ENUM(NSInteger, PDMDownloadStatus) {
 + (instancetype)fromDictionary:(NSDictionary<NSString *, id> *)dict;
 @end
 
-@interface PDMDownloadItem : NSObject
+@interface PDMDownloadItem : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *itemID;
 @property (nonatomic, copy) NSString *urlString;
 @property (nonatomic, copy, nullable) NSString *referer;

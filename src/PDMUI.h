@@ -24,6 +24,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *badgeText;
 @property (nonatomic, assign) BOOL prominentAccent;
 @property (nonatomic, assign) BOOL glowing;
+@property (nonatomic, assign) BOOL borderless;
+@property (nonatomic, assign) CGFloat symbolPointSize;
 @property (nonatomic, strong, nullable) UIColor *customAccentColor;
 @property (nonatomic, assign) CGFloat horizontalPadding;
 @property (nonatomic, assign) CGFloat verticalPadding;

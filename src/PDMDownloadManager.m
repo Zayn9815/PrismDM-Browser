@@ -46,6 +46,16 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
     return s;
 }
 
+- (id)copyWithZone:(nullable NSZone *)zone {
+    PDMDownloadSegment *c = [[[self class] allocWithZone:zone] init];
+    c.index = self.index;
+    c.startOffset = self.startOffset;
+    c.endOffset = self.endOffset;
+    c.downloadedBytes = self.downloadedBytes;
+    c.completed = self.completed;
+    return c;
+}
+
 @end
 
 #pragma mark - PDMDownloadItem
@@ -65,6 +75,43 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
         _createdAt = [NSDate date];
     }
     return self;
+}
+
+- (id)copyWithZone:(nullable NSZone *)zone {
+    PDMDownloadItem *c = [[[self class] allocWithZone:zone] init];
+    c.itemID = self.itemID;
+    c.urlString = self.urlString;
+    c.referer = self.referer;
+    c.userAgent = self.userAgent;
+    c.cookieHeader = self.cookieHeader;
+    c.filename = self.filename;
+    c.localFilePath = self.localFilePath;
+    c.partFilePath = self.partFilePath;
+    c.category = self.category;
+    c.isPrivateVault = self.isPrivateVault;
+    c.status = self.status;
+    c.totalBytes = self.totalBytes;
+    c.downloadedBytes = self.downloadedBytes;
+    c.speedBytesPerSec = self.speedBytesPerSec;
+    c.etaSeconds = self.etaSeconds;
+    c.conversionProgress = self.conversionProgress;
+    c.errorMessage = self.errorMessage;
+    c.supportsRange = self.supportsRange;
+    c.segmentCount = self.segmentCount;
+    NSMutableArray<PDMDownloadSegment *> *segCopies = [NSMutableArray arrayWithCapacity:self.segments.count];
+    for (PDMDownloadSegment *seg in self.segments) {
+        [segCopies addObject:[seg copy]];
+    }
+    c.segments = segCopies;
+    c.isHLS = self.isHLS;
+    c.hlsVideoVariantURL = self.hlsVideoVariantURL;
+    c.hlsAudioTrackURL = self.hlsAudioTrackURL;
+    c.qualityLabel = self.qualityLabel;
+    c.audioTrackLabel = self.audioTrackLabel;
+    c.formatConfig = [self.formatConfig copy];
+    c.createdAt = self.createdAt;
+    c.completedAt = self.completedAt;
+    return c;
 }
 
 - (double)overallProgress {
@@ -202,6 +249,8 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
 @property (nonatomic, assign) int64_t bytesInWindow;
 @property (nonatomic, assign) CFTimeInterval lastSampleTime;
 @property (nonatomic, assign) BOOL cancelledOrPaused;
+@property (nonatomic, assign) BOOL finalizing;
+@property (nonatomic, assign) BOOL fellBackToSingle;
 @end
 
 @implementation PDMActiveDownloadContext
@@ -327,7 +376,11 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
 - (NSArray<PDMDownloadItem *> *)items {
     __block NSArray<PDMDownloadItem *> *snap = nil;
     dispatch_sync(self.engineQueue, ^{
-        snap = [self.mutableItems copy];
+        NSMutableArray<PDMDownloadItem *> *copies = [NSMutableArray arrayWithCapacity:self.mutableItems.count];
+        for (PDMDownloadItem *it in self.mutableItems) {
+            [copies addObject:[it copy]];
+        }
+        snap = [copies copy];
     });
     return snap ?: @[];
 }
@@ -761,14 +814,16 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
         NSURL *tmpDir = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"pdm_hls_%@", item.itemID]] isDirectory:YES];
         [[NSFileManager defaultManager] createDirectoryAtURL:tmpDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-        NSURL *rawVideoFile = [tmpDir URLByAppendingPathComponent:@"video_stream.ts"];
-        NSURL *rawAudioFile = audioPlaylistURL ? [tmpDir URLByAppendingPathComponent:@"audio_stream.aac"] : nil;
+        NSURL *rawVideoFile = [tmpDir URLByAppendingPathComponent:@"video_stream.mp4"];
+        NSURL *rawAudioFile = audioPlaylistURL ? [tmpDir URLByAppendingPathComponent:@"audio_stream.m4a"] : nil;
 
         NSError *hlsErr = nil;
+        BOOL videoIsFMP4 = NO;
         BOOL vOK = [self downloadHLSStreamFromPlaylist:videoPlaylistURL
                                              toFileURL:rawVideoFile
                                                   item:item
                                                context:ctx
+                                             outIsFMP4:&videoIsFMP4
                                                  error:&hlsErr];
         if (!vOK || ctx.cancelledOrPaused) {
             [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
@@ -779,12 +834,21 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
             });
             return;
         }
+        if (!videoIsFMP4) {
+            NSURL *tsURL = [tmpDir URLByAppendingPathComponent:@"video_stream.ts"];
+            [[NSFileManager defaultManager] removeItemAtURL:tsURL error:nil];
+            if ([[NSFileManager defaultManager] moveItemAtURL:rawVideoFile toURL:tsURL error:nil]) {
+                rawVideoFile = tsURL;
+            }
+        }
 
         if (audioPlaylistURL && rawAudioFile) {
+            BOOL audioIsFMP4 = NO;
             BOOL aOK = [self downloadHLSStreamFromPlaylist:audioPlaylistURL
                                                  toFileURL:rawAudioFile
                                                       item:item
                                                    context:ctx
+                                                 outIsFMP4:&audioIsFMP4
                                                      error:&hlsErr];
             if (!aOK || ctx.cancelledOrPaused) {
                 [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
@@ -794,6 +858,13 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
                     }
                 });
                 return;
+            }
+            if (!audioIsFMP4) {
+                NSURL *aacURL = [tmpDir URLByAppendingPathComponent:@"audio_stream.aac"];
+                [[NSFileManager defaultManager] removeItemAtURL:aacURL error:nil];
+                if ([[NSFileManager defaultManager] moveItemAtURL:rawAudioFile toURL:aacURL error:nil]) {
+                    rawAudioFile = aacURL;
+                }
             }
         }
 
@@ -825,10 +896,11 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
 
         NSURL *assembledSource = muxSuccess ? muxedURL : rawVideoFile;
         dispatch_async(self.engineQueue, ^{
-            if (ctx.cancelledOrPaused) {
+            if (ctx.cancelledOrPaused || ctx.finalizing) {
                 [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
                 return;
             }
+            ctx.finalizing = YES;
             if (!muxSuccess && ![[NSFileManager defaultManager] fileExistsAtPath:assembledSource.path]) {
                 [[NSFileManager defaultManager] removeItemAtURL:tmpDir error:nil];
                 [self failItemLocked:item message:(muxError.localizedDescription ?: @"HLS muxing failed")];
@@ -840,6 +912,7 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
 }
 
 - (nullable NSData *)syncFetchURL:(NSURL *)url item:(PDMDownloadItem *)item {
+    if (!url) return nil;
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
     req.timeoutInterval = 25.0;
     [self applyHeadersFromItem:item toRequest:req];
@@ -857,7 +930,9 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
                             toFileURL:(NSURL *)outFileURL
                                  item:(PDMDownloadItem *)item
                               context:(PDMActiveDownloadContext *)ctx
+                            outIsFMP4:(BOOL *)outIsFMP4
                                 error:(NSError **)outError {
+    if (outIsFMP4) *outIsFMP4 = NO;
     NSData *plData = [self syncFetchURL:playlistURL item:item];
     if (plData.length == 0) {
         if (outError) *outError = [NSError errorWithDomain:@"com.prismdm.hls" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Could not fetch HLS playlist."}];
@@ -866,7 +941,38 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
     NSString *text = [[NSString alloc] initWithData:plData encoding:NSUTF8StringEncoding];
     NSArray<NSString *> *lines = [text componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
 
+    // If this is a master playlist, follow the highest-bandwidth media playlist automatically
+    if ([text containsString:@"#EXT-X-STREAM-INF:"]) {
+        NSURL *bestVariantURL = nil;
+        int64_t bestBW = -1;
+        int64_t pendingBW = 0;
+        BOOL nextIsVariant = NO;
+        for (NSString *rawLine in lines) {
+            NSString *line = [rawLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (line.length == 0) continue;
+            if ([line hasPrefix:@"#EXT-X-STREAM-INF:"]) {
+                pendingBW = 0;
+                NSRange bwRange = [line rangeOfString:@"BANDWIDTH="];
+                if (bwRange.location != NSNotFound) {
+                    pendingBW = [[line substringFromIndex:NSMaxRange(bwRange)] longLongValue];
+                }
+                nextIsVariant = YES;
+            } else if (nextIsVariant && ![line hasPrefix:@"#"]) {
+                NSURL *vU = [NSURL URLWithString:line relativeToURL:playlistURL].absoluteURL;
+                if (vU && pendingBW >= bestBW) {
+                    bestBW = pendingBW;
+                    bestVariantURL = vU;
+                }
+                nextIsVariant = NO;
+            }
+        }
+        if (bestVariantURL && ![bestVariantURL.absoluteString isEqualToString:playlistURL.absoluteString]) {
+            return [self downloadHLSStreamFromPlaylist:bestVariantURL toFileURL:outFileURL item:item context:ctx outIsFMP4:outIsFMP4 error:outError];
+        }
+    }
+
     NSMutableArray<NSURL *> *segURLs = [NSMutableArray array];
+    NSURL *mapInitURL = nil;
     NSData *aesKey = nil;
     NSData *explicitIV = nil;
     int64_t mediaSeq = 0;
@@ -876,6 +982,16 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
         if (line.length == 0) continue;
         if ([line hasPrefix:@"#EXT-X-MEDIA-SEQUENCE:"]) {
             mediaSeq = [[line substringFromIndex:22] longLongValue];
+        } else if ([line hasPrefix:@"#EXT-X-MAP:"]) {
+            NSRange uriRange = [line rangeOfString:@"URI=\""];
+            if (uriRange.location != NSNotFound) {
+                NSString *rest = [line substringFromIndex:NSMaxRange(uriRange)];
+                NSRange endQ = [rest rangeOfString:@"\""];
+                if (endQ.location != NSNotFound) {
+                    NSString *mapStr = [rest substringToIndex:endQ.location];
+                    mapInitURL = [NSURL URLWithString:mapStr relativeToURL:playlistURL].absoluteURL;
+                }
+            }
         } else if ([line hasPrefix:@"#EXT-X-KEY:"]) {
             if ([line containsString:@"METHOD=AES-128"]) {
                 NSRange uriRange = [line rangeOfString:@"URI=\""];
@@ -921,6 +1037,15 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
         return NO;
     }
 
+    BOOL detectedFMP4 = (mapInitURL != nil);
+    if (mapInitURL) {
+        NSData *initData = [self syncFetchURL:mapInitURL item:item];
+        if (initData.length > 0) {
+            ssize_t wr = write(fd, initData.bytes, initData.length);
+            (void)wr;
+        }
+    }
+
     NSUInteger totalSegs = segURLs.count;
     for (NSUInteger i = 0; i < totalSegs; i++) {
         if (ctx.cancelledOrPaused) {
@@ -943,6 +1068,13 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
             NSData *dec = [PDMTranscoder decryptAES128Data:segData key:aesKey iv:ivToUse];
             if (dec) segData = dec;
         }
+        if (i == 0 && !detectedFMP4 && segData.length >= 8) {
+            const uint8_t *b = (const uint8_t *)segData.bytes;
+            if ((b[4] == 'f' && b[5] == 't' && b[6] == 'y' && b[7] == 'p') ||
+                (b[4] == 's' && b[5] == 't' && b[6] == 'y' && b[7] == 'p')) {
+                detectedFMP4 = YES;
+            }
+        }
         if (segData.length > 0) {
             ssize_t wr = write(fd, segData.bytes, segData.length);
             (void)wr;
@@ -957,10 +1089,60 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
 
     fsync(fd);
     close(fd);
+    if (outIsFMP4) *outIsFMP4 = detectedFMP4;
     return YES;
 }
 
 #pragma mark - NSURLSession Delegates
+
+- (void)URLSession:(NSURLSession *__unused)session
+          dataTask:(NSURLSessionDataTask *)dataTask
+didReceiveResponse:(NSURLResponse *)response
+ completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
+    NSNumber *tid = @(dataTask.taskIdentifier);
+    NSString *itemID = self.taskIDToItemID[tid];
+    PDMActiveDownloadContext *ctx = itemID ? self.activeContexts[itemID] : nil;
+    PDMDownloadItem *item = itemID ? [self itemForIDLocked:itemID] : nil;
+
+    if (!ctx || !item || ctx.cancelledOrPaused) {
+        completionHandler(NSURLSessionResponseCancel);
+        return;
+    }
+
+    if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+        NSInteger statusCode = ((NSHTTPURLResponse *)response).statusCode;
+        if (statusCode >= 400) {
+            completionHandler(NSURLSessionResponseCancel);
+            [self failItemLocked:item message:[NSString stringWithFormat:@"Server returned HTTP %ld", (long)statusCode]];
+            return;
+        }
+        // If server ignored Range header and sent HTTP 200 for a multi-segment part, switch cleanly to single stream
+        if (ctx.taskIDToSegmentIndex[tid] != nil && statusCode != 206) {
+            completionHandler(NSURLSessionResponseCancel);
+            if (!ctx.fellBackToSingle) {
+                ctx.fellBackToSingle = YES;
+                NSArray<NSURLSessionTask *> *oldTasks = [ctx.tasks copy];
+                [ctx.tasks removeAllObjects];
+                [ctx.taskIDToSegmentIndex removeAllObjects];
+                for (NSURLSessionTask *t in oldTasks) {
+                    [self.taskIDToItemID removeObjectForKey:@(t.taskIdentifier)];
+                    if (t != dataTask) {
+                        [t cancel];
+                    }
+                }
+                [ctx closeFileDescriptor];
+                [item.segments removeAllObjects];
+                item.supportsRange = NO;
+                item.segmentCount = 1;
+                item.downloadedBytes = 0;
+                [self launchSingleFallbackDownloadLocked:item context:ctx];
+            }
+            return;
+        }
+    }
+
+    completionHandler(NSURLSessionResponseAllow);
+}
 
 - (void)URLSession:(NSURLSession *__unused)session
           dataTask:(NSURLSessionDataTask *)dataTask
@@ -971,7 +1153,7 @@ static const int64_t kPDMMultiSegmentThresholdBytes = 2LL * 1024LL * 1024LL; // 
 
     PDMActiveDownloadContext *ctx = self.activeContexts[itemID];
     PDMDownloadItem *item = [self itemForIDLocked:itemID];
-    if (!ctx || !item || ctx.cancelledOrPaused) return;
+    if (!ctx || !item || ctx.cancelledOrPaused || ctx.finalizing) return;
 
     NSNumber *segIdxNum = ctx.taskIDToSegmentIndex[tid];
     if (!segIdxNum) return;
@@ -1022,7 +1204,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     if (!itemID) return;
     PDMActiveDownloadContext *ctx = self.activeContexts[itemID];
     PDMDownloadItem *item = [self itemForIDLocked:itemID];
-    if (!ctx || !item) return;
+    if (!ctx || !item || ctx.cancelledOrPaused || ctx.finalizing) return;
 
     item.downloadedBytes = totalBytesWritten;
     if (totalBytesExpectedToWrite > 0) {
@@ -1039,7 +1221,26 @@ didFinishDownloadingToURL:(NSURL *)location {
     if (!itemID) return;
     PDMActiveDownloadContext *ctx = self.activeContexts[itemID];
     PDMDownloadItem *item = [self itemForIDLocked:itemID];
-    if (!ctx || !item || ctx.cancelledOrPaused) return;
+    if (!ctx || !item || ctx.cancelledOrPaused || ctx.finalizing) return;
+
+    if ([downloadTask.response isKindOfClass:[NSHTTPURLResponse class]]) {
+        NSInteger statusCode = ((NSHTTPURLResponse *)downloadTask.response).statusCode;
+        if (statusCode >= 400) {
+            [self failItemLocked:item message:[NSString stringWithFormat:@"Server returned HTTP %ld", (long)statusCode]];
+            return;
+        }
+    }
+
+    if (item.partFilePath.length == 0) {
+        NSURL *partDir = [[[self class] downloadsBaseDirectory] URLByAppendingPathComponent:@".parts" isDirectory:YES];
+        [[NSFileManager defaultManager] createDirectoryAtURL:partDir withIntermediateDirectories:YES attributes:nil error:nil];
+        item.partFilePath = [partDir URLByAppendingPathComponent:[NSString stringWithFormat:@"%@.pdmpart", item.itemID]].path;
+    } else {
+        NSString *parentDir = [item.partFilePath stringByDeletingLastPathComponent];
+        if (parentDir.length > 0) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:parentDir withIntermediateDirectories:YES attributes:nil error:nil];
+        }
+    }
 
     // Move temporary file to part path immediately before delegate returns
     [[NSFileManager defaultManager] removeItemAtPath:item.partFilePath error:nil];
@@ -1068,7 +1269,7 @@ didCompleteWithError:(nullable NSError *)error {
     NSNumber *segIdxNum = ctx.taskIDToSegmentIndex[tid];
     [ctx.taskIDToSegmentIndex removeObjectForKey:tid];
 
-    if (ctx.cancelledOrPaused) {
+    if (ctx.cancelledOrPaused || ctx.finalizing) {
         return;
     }
 
@@ -1083,7 +1284,7 @@ didCompleteWithError:(nullable NSError *)error {
         if (segIdx >= 0 && segIdx < (NSInteger)item.segments.count) {
             item.segments[(NSUInteger)segIdx].completed = YES;
         }
-        BOOL allDone = YES;
+        BOOL allDone = (item.segments.count > 0);
         for (PDMDownloadSegment *seg in item.segments) {
             if (!seg.completed) {
                 allDone = NO;
@@ -1101,7 +1302,13 @@ didCompleteWithError:(nullable NSError *)error {
 #pragma mark - Completion & Auto-Conversion Pipeline
 
 - (void)completeDownloadedPartFileLocked:(PDMDownloadItem *)item context:(PDMActiveDownloadContext *)ctx {
+    if (ctx.finalizing || ctx.cancelledOrPaused) return;
+    ctx.finalizing = YES;
     [ctx closeFileDescriptor];
+    if (item.partFilePath.length == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:item.partFilePath]) {
+        [self failItemLocked:item message:@"Downloaded file is missing from disk."];
+        return;
+    }
     NSURL *partURL = [NSURL fileURLWithPath:item.partFilePath];
     [self finalizeOrAutoConvertFileAtURL:partURL cleanupDirectory:nil forItemLocked:item context:ctx];
 }
@@ -1146,6 +1353,20 @@ didCompleteWithError:(nullable NSError *)error {
         return;
     }
 
+    // Rename .pdmpart to a proper media extension so AVURLAsset can always parse it cleanly
+    NSURL *transcodeInputURL = downloadedURL;
+    if ([downloadedURL.pathExtension.lowercaseString isEqualToString:@"pdmpart"] || downloadedURL.pathExtension.length == 0) {
+        NSString *realExt = item.filename.pathExtension.lowercaseString;
+        if (realExt.length == 0 || [realExt isEqualToString:@"pdmpart"] || [realExt isEqualToString:@"bin"]) {
+            realExt = @"mp4";
+        }
+        NSURL *renamedURL = [[downloadedURL URLByDeletingPathExtension] URLByAppendingPathExtension:realExt];
+        [[NSFileManager defaultManager] removeItemAtURL:renamedURL error:nil];
+        if ([[NSFileManager defaultManager] moveItemAtURL:downloadedURL toURL:renamedURL error:nil]) {
+            transcodeInputURL = renamedURL;
+        }
+    }
+
     // Automatic Post-Download Format & Encoding Conversion
     item.status = PDMDownloadStatusConverting;
     item.conversionProgress = 0.0;
@@ -1155,6 +1376,7 @@ didCompleteWithError:(nullable NSError *)error {
 
     NSString *targetExt = [item.formatConfig targetFileExtension];
     NSString *outBase = [item.filename stringByDeletingPathExtension];
+    if (outBase.length == 0) outBase = @"PrismDM_Media";
     NSString *convertedName = (targetExt.length > 0)
         ? [outBase stringByAppendingPathExtension:targetExt]
         : item.filename;
@@ -1168,11 +1390,11 @@ didCompleteWithError:(nullable NSError *)error {
         NSURL *origDest = [self uniqueDestinationURLForFilename:item.filename
                                                        category:item.category
                                                  isPrivateVault:item.isPrivateVault];
-        [[NSFileManager defaultManager] copyItemAtURL:downloadedURL toURL:origDest error:nil];
+        [[NSFileManager defaultManager] copyItemAtURL:transcodeInputURL toURL:origDest error:nil];
     }
 
     __weak typeof(self) weakSelf = self;
-    ctx.transcodeJob = [[PDMTranscoder sharedTranscoder] transcodeFileAtURL:downloadedURL
+    ctx.transcodeJob = [[PDMTranscoder sharedTranscoder] transcodeFileAtURL:transcodeInputURL
                                                                 toOutputURL:convertedURL
                                                                      config:item.formatConfig
                                                                    progress:^(double fraction) {
@@ -1185,7 +1407,7 @@ didCompleteWithError:(nullable NSError *)error {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         dispatch_async(strongSelf.engineQueue, ^{
-            [[NSFileManager defaultManager] removeItemAtURL:downloadedURL error:nil];
+            [[NSFileManager defaultManager] removeItemAtURL:transcodeInputURL error:nil];
             if (cleanupDir) {
                 [[NSFileManager defaultManager] removeItemAtURL:cleanupDir error:nil];
             }
@@ -1859,6 +2081,7 @@ didCompleteWithError:(nullable NSError *)error {
 @property (nonatomic, strong) PDMGlassPillButton *speedLimitBtn;
 @property (nonatomic, strong) PDMGlassPillButton *wifiOnlyBtn;
 @property (nonatomic, strong) UIStackView *filterBar;
+@property (nonatomic, strong) NSArray<PDMGlassChip *> *filterChips;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UILabel *emptyStateLabel;
 @property (nonatomic, copy) NSString *activeFilter; // All, Active, Converting, Completed
@@ -1897,11 +2120,11 @@ didCompleteWithError:(nullable NSError *)error {
 
     UILabel *titleLbl = [[UILabel alloc] init];
     titleLbl.text = @"Downloads";
-    titleLbl.font = [[PDMThemeManager sharedManager] displayFontOfSize:26.0 weight:UIFontWeightHeavy];
+    titleLbl.font = [[PDMThemeManager sharedManager] displayFontOfSize:24.0 weight:UIFontWeightBold];
     titleLbl.tag = 9001;
     [navRow addArrangedSubview:titleLbl];
 
-    PDMGlassPillButton *libBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Library" symbolName:@"folder.fill"];
+    PDMGlassPillButton *libBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Library" symbolName:@"folder"];
     [libBtn addTarget:self action:@selector(handleOpenLibrary) forControlEvents:UIControlEventTouchUpInside];
     [navRow addArrangedSubview:libBtn];
 
@@ -1911,14 +2134,15 @@ didCompleteWithError:(nullable NSError *)error {
     [closeBtn addTarget:self action:@selector(handleClose) forControlEvents:UIControlEventTouchUpInside];
     [navRow addArrangedSubview:closeBtn];
 
-    // Top Hero Telemetry Glass Banner
-    self.heroBanner = [[PDMGlassView alloc] initWithCornerRadius:22.0 elevated:YES];
+    // Top Summary Banner
+    self.heroBanner = [[PDMGlassView alloc] initWithCornerRadius:16.0 elevated:NO];
+    self.heroBanner.showAmbientShadow = NO;
     self.heroBanner.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.heroBanner];
 
     UIStackView *heroMain = [[UIStackView alloc] init];
     heroMain.axis = UILayoutConstraintAxisVertical;
-    heroMain.spacing = 12.0;
+    heroMain.spacing = 10.0;
     heroMain.translatesAutoresizingMaskIntoConstraints = NO;
     [self.heroBanner.contentView addSubview:heroMain];
 
@@ -1932,28 +2156,28 @@ didCompleteWithError:(nullable NSError *)error {
 
     self.speedHeroLabel = [[UILabel alloc] init];
     self.speedHeroLabel.text = @"0 KB/s";
-    self.speedHeroLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:24.0 weight:UIFontWeightHeavy];
+    self.speedHeroLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:20.0 weight:UIFontWeightBold];
     self.speedHeroLabel.textColor = spec.accentColor;
     [speedCol addArrangedSubview:self.speedHeroLabel];
 
     self.countsHeroLabel = [[UILabel alloc] init];
-    self.countsHeroLabel.text = @"0 Active · 0 Queued · Multi-Part Ready";
-    self.countsHeroLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:12.0 weight:UIFontWeightMedium];
+    self.countsHeroLabel.text = @"0 Active · 0 Queued";
+    self.countsHeroLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:12.0 weight:UIFontWeightRegular];
     self.countsHeroLabel.textColor = spec.secondaryTextColor;
     [speedCol addArrangedSubview:self.countsHeroLabel];
     [telemetryRow addArrangedSubview:speedCol];
 
-    PDMGlassPillButton *addBtn = [[PDMGlassPillButton alloc] initWithTitle:@"+ Add URL" symbolName:@"plus"];
+    PDMGlassPillButton *addBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Add URL" symbolName:@"plus"];
     addBtn.prominentAccent = YES;
     [addBtn addTarget:self action:@selector(handleAddURLTap) forControlEvents:UIControlEventTouchUpInside];
     [telemetryRow addArrangedSubview:addBtn];
     [heroMain addArrangedSubview:telemetryRow];
 
-    // Quick-toggle glass pills row
+    // Quick-toggle pills row
     UIScrollView *toggleScroll = [[UIScrollView alloc] init];
     toggleScroll.showsHorizontalScrollIndicator = NO;
     toggleScroll.translatesAutoresizingMaskIntoConstraints = NO;
-    [toggleScroll.heightAnchor constraintEqualToConstant:36.0].active = YES;
+    [toggleScroll.heightAnchor constraintEqualToConstant:34.0].active = YES;
 
     UIStackView *toggleRow = [[UIStackView alloc] init];
     toggleRow.axis = UILayoutConstraintAxisHorizontal;
@@ -1968,7 +2192,7 @@ didCompleteWithError:(nullable NSError *)error {
         [toggleRow.heightAnchor constraintEqualToAnchor:toggleScroll.frameLayoutGuide.heightAnchor]
     ]];
 
-    self.speedLimitBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Speed: Unlimited" symbolName:@"bolt.fill"];
+    self.speedLimitBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Speed: Unlimited" symbolName:@"speedometer"];
     [self.speedLimitBtn addTarget:self action:@selector(handleCycleSpeedLimit) forControlEvents:UIControlEventTouchUpInside];
     [toggleRow addArrangedSubview:self.speedLimitBtn];
 
@@ -1976,19 +2200,31 @@ didCompleteWithError:(nullable NSError *)error {
     [self.wifiOnlyBtn addTarget:self action:@selector(handleToggleWifiOnly) forControlEvents:UIControlEventTouchUpInside];
     [toggleRow addArrangedSubview:self.wifiOnlyBtn];
 
-    PDMGlassPillButton *settingsBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Engine" symbolName:@"slider.horizontal.3"];
+    PDMGlassPillButton *settingsBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Settings" symbolName:@"slider.horizontal.3"];
     [settingsBtn addTarget:self action:@selector(handleOpenSettings) forControlEvents:UIControlEventTouchUpInside];
     [toggleRow addArrangedSubview:settingsBtn];
 
     [heroMain addArrangedSubview:toggleScroll];
 
-    // Glass Filter Pill Bar
+    // Filter Bar (created once and updated in place)
     self.filterBar = [[UIStackView alloc] init];
     self.filterBar.axis = UILayoutConstraintAxisHorizontal;
     self.filterBar.spacing = 8.0;
     self.filterBar.distribution = UIStackViewDistributionFillEqually;
     self.filterBar.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.filterBar];
+
+    NSArray<NSString *> *filterKeys = @[@"All", @"Active", @"Converting", @"Completed"];
+    NSMutableArray<PDMGlassChip *> *chips = [NSMutableArray arrayWithCapacity:filterKeys.count];
+    for (NSUInteger i = 0; i < filterKeys.count; i++) {
+        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:filterKeys[i] subtitle:@"0"];
+        c.tag = (NSInteger)i;
+        c.chipSelected = [self.activeFilter isEqualToString:filterKeys[i]];
+        [c addTarget:self action:@selector(handleFilterTap:) forControlEvents:UIControlEventTouchUpInside];
+        [self.filterBar addArrangedSubview:c];
+        [chips addObject:c];
+    }
+    self.filterChips = chips;
 
     // TableView
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
@@ -2003,8 +2239,8 @@ didCompleteWithError:(nullable NSError *)error {
     [self.view addSubview:self.tableView];
 
     self.emptyStateLabel = [[UILabel alloc] init];
-    self.emptyStateLabel.text = @"No downloads yet.\nTap + Add URL or grab media from any webpage.";
-    self.emptyStateLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.5 weight:UIFontWeightMedium];
+    self.emptyStateLabel.text = @"No downloads yet.\nTap Add URL or grab media from any webpage.";
+    self.emptyStateLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.5 weight:UIFontWeightRegular];
     self.emptyStateLabel.numberOfLines = 0;
     self.emptyStateLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyStateLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -2019,12 +2255,12 @@ didCompleteWithError:(nullable NSError *)error {
         [self.heroBanner.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:14.0],
         [self.heroBanner.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-14.0],
 
-        [heroMain.topAnchor constraintEqualToAnchor:self.heroBanner.contentView.topAnchor constant:14.0],
-        [heroMain.bottomAnchor constraintEqualToAnchor:self.heroBanner.contentView.bottomAnchor constant:-14.0],
+        [heroMain.topAnchor constraintEqualToAnchor:self.heroBanner.contentView.topAnchor constant:12.0],
+        [heroMain.bottomAnchor constraintEqualToAnchor:self.heroBanner.contentView.bottomAnchor constant:-12.0],
         [heroMain.leadingAnchor constraintEqualToAnchor:self.heroBanner.contentView.leadingAnchor constant:14.0],
         [heroMain.trailingAnchor constraintEqualToAnchor:self.heroBanner.contentView.trailingAnchor constant:-14.0],
 
-        [self.filterBar.topAnchor constraintEqualToAnchor:self.heroBanner.bottomAnchor constant:12.0],
+        [self.filterBar.topAnchor constraintEqualToAnchor:self.heroBanner.bottomAnchor constant:10.0],
         [self.filterBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:14.0],
         [self.filterBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-14.0],
 
@@ -2068,6 +2304,12 @@ didCompleteWithError:(nullable NSError *)error {
 }
 
 - (void)reloadData {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self reloadData];
+        });
+        return;
+    }
     PDMDownloadManager *dm = [PDMDownloadManager sharedManager];
     NSArray<PDMDownloadItem *> *all = dm.items;
 
@@ -2095,25 +2337,12 @@ didCompleteWithError:(nullable NSError *)error {
     self.countsHeroLabel.text = [NSString stringWithFormat:@"%ld Active · %ld Queued · %lu Total",
                                  (long)dm.activeCount, (long)dm.queuedCount, (unsigned long)all.count];
 
-    // Rebuild filter bar chips with live counts
-    for (UIView *v in [self.filterBar.arrangedSubviews copy]) {
-        [self.filterBar removeArrangedSubview:v];
-        [v removeFromSuperview];
-    }
-    NSArray<NSArray *> *tabs = @[
-        @[@"All", @(all.count)],
-        @[@"Active", @(activeC)],
-        @[@"Converting", @(convC)],
-        @[@"Completed", @(compC)]
-    ];
-    for (NSUInteger i = 0; i < tabs.count; i++) {
-        NSString *key = tabs[i][0];
-        NSInteger cnt = [tabs[i][1] integerValue];
-        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:key subtitle:[NSString stringWithFormat:@"%ld", (long)cnt]];
-        c.tag = (NSInteger)i;
-        c.chipSelected = [self.activeFilter isEqualToString:key];
-        [c addTarget:self action:@selector(handleFilterTap:) forControlEvents:UIControlEventTouchUpInside];
-        [self.filterBar addArrangedSubview:c];
+    NSArray<NSString *> *keys = @[@"All", @"Active", @"Converting", @"Completed"];
+    NSArray<NSNumber *> *counts = @[@(all.count), @(activeC), @(convC), @(compC)];
+    for (NSUInteger i = 0; i < self.filterChips.count && i < keys.count; i++) {
+        PDMGlassChip *c = self.filterChips[i];
+        c.subtitleText = [NSString stringWithFormat:@"%ld", (long)counts[i].integerValue];
+        c.chipSelected = [self.activeFilter isEqualToString:keys[i]];
     }
 
     self.emptyStateLabel.hidden = (self.filteredItems.count > 0);

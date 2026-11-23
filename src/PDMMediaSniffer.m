@@ -794,7 +794,7 @@ static NSString *PDMQualityLabelForHeight(NSInteger height) {
 
 - (void)viewDidLoad {
     self.sheetTitle = self.studioOnlyMode ? @"Format & Encoding Studio" : @"Media Grabber";
-    self.sheetSubtitle = self.media.sourceBadge ? [NSString stringWithFormat:@"%@ · Liquid Glass Studio", self.media.sourceBadge] : @"Quality, Multi-Audio & Format";
+    self.sheetSubtitle = self.media.sourceBadge ? [NSString stringWithFormat:@"%@ · Quality, Audio & Format", self.media.sourceBadge] : @"Quality, Audio & Format";
     self.sheetSymbolName = self.studioOnlyMode ? @"wand.and.stars" : @"arrow.down.circle.fill";
     self.allowsMediumDetent = YES;
     self.prefersLargeDefaultDetent = YES;

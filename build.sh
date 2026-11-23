@@ -31,6 +31,7 @@ FRAMEWORKS=(
     AVKit
     AudioToolbox
     CoreMedia
+    CoreVideo
     MediaPlayer
     LocalAuthentication
     QuartzCore

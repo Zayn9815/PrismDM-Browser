@@ -139,7 +139,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
 @end
 
-#pragma mark - Settings & Theme Studio Sheet
+#pragma mark - Settings Sheet
 
 @interface PDMSettingsSheetViewController : PDMGlassSheetViewController
 @property (nonatomic, copy, nullable) dispatch_block_t onClearAllDataRequested;
@@ -154,9 +154,9 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 @implementation PDMSettingsSheetViewController
 
 - (void)viewDidLoad {
-    self.sheetTitle = @"PrismDM Studio";
-    self.sheetSubtitle = @"Themes, Chrome Layout, Engine & Legal";
-    self.sheetSymbolName = @"sparkles";
+    self.sheetTitle = @"Settings";
+    self.sheetSubtitle = @"Appearance, address bar & downloads";
+    self.sheetSymbolName = @"gearshape";
     self.allowsMediumDetent = NO;
     self.prefersLargeDefaultDetent = YES;
     [super viewDidLoad];
@@ -174,29 +174,31 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     PDMThemeManager *tm = [PDMThemeManager sharedManager];
     PDMThemeSpec *spec = tm.currentSpec;
 
-    // 1. 6 Live Switchable Themes
-    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Liquid Glass Themes (6 Live)" detail:@"Instant Live Refresh"]];
+    // 1. Clean Appearance (System / Light / Dark)
+    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Appearance" detail:nil]];
     self.themeGridStack = [[UIStackView alloc] init];
-    self.themeGridStack.axis = UILayoutConstraintAxisVertical;
+    self.themeGridStack.axis = UILayoutConstraintAxisHorizontal;
     self.themeGridStack.spacing = 8.0;
+    self.themeGridStack.distribution = UIStackViewDistributionFillEqually;
     [self.contentStack addArrangedSubview:self.themeGridStack];
 
-    // 2. 3 Layout Presets
-    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Browser Chrome Layout (3 Presets)" detail:@"Zero Restart"]];
+    // 2. Address Bar Position (Top / Bottom, Chrome iOS style)
+    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Address Bar" detail:nil]];
     self.layoutStack = [[UIStackView alloc] init];
-    self.layoutStack.axis = UILayoutConstraintAxisVertical;
+    self.layoutStack.axis = UILayoutConstraintAxisHorizontal;
     self.layoutStack.spacing = 8.0;
+    self.layoutStack.distribution = UIStackViewDistributionFillEqually;
     [self.contentStack addArrangedSubview:self.layoutStack];
 
     // 3. Search Engine
-    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Default Search Engine" detail:nil]];
+    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Search Engine" detail:nil]];
     self.engineStack = [[UIStackView alloc] init];
     self.engineStack.axis = UILayoutConstraintAxisVertical;
     self.engineStack.spacing = 8.0;
     [self.contentStack addArrangedSubview:self.engineStack];
 
-    // 4. IDM Multi-Part Download Engine
-    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"IDM Download & Converter Engine" detail:@"Parallel Segments"]];
+    // 4. Download & Conversion Engine
+    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Downloads & Conversion" detail:@"Parallel Segments"]];
     self.partsStack = [[UIStackView alloc] init];
     self.partsStack.axis = UILayoutConstraintAxisHorizontal;
     self.partsStack.spacing = 8.0;
@@ -215,13 +217,13 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     self.speedStack.distribution = UIStackViewDistributionFillEqually;
     [self.contentStack addArrangedSubview:self.speedStack];
 
-    // 5. Privacy & Behaviour Toggles
-    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Privacy, Security & Transcoding" detail:nil]];
-    PDMGlassView *togglesCard = [[PDMGlassView alloc] initWithCornerRadius:18.0 elevated:NO];
+    // 5. Privacy & Behavior Toggles
+    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"Privacy & Behavior" detail:nil]];
+    PDMGlassView *togglesCard = [[PDMGlassView alloc] initWithCornerRadius:14.0 elevated:NO];
     togglesCard.showAmbientShadow = NO;
     UIStackView *tStack = [[UIStackView alloc] init];
     tStack.axis = UILayoutConstraintAxisVertical;
-    tStack.spacing = 10.0;
+    tStack.spacing = 12.0;
     tStack.translatesAutoresizingMaskIntoConstraints = NO;
     [togglesCard.contentView addSubview:tStack];
     [NSLayoutConstraint activateConstraints:@[
@@ -231,14 +233,14 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
         [tStack.trailingAnchor constraintEqualToAnchor:togglesCard.contentView.trailingAnchor constant:-14.0]
     ]];
 
-    [self addToggleTo:tStack title:@"Face ID / Touch ID Vault Lock" subtitle:@"Require biometrics for Private Tabs & Private Downloads" isOn:tm.biometricVaultLockEnabled tag:1];
-    [self addToggleTo:tStack title:@"Global Force Dark Mode" subtitle:@"Default smart dark CSS injection on websites" isOn:tm.globalForceDarkMode tag:2];
-    [self addToggleTo:tStack title:@"Clear Browsing Data on Exit" subtitle:@"Wipe history, cache & cookies when app closes" isOn:tm.clearDataOnExit tag:3];
-    [self addToggleTo:tStack title:@"Wi-Fi Only Downloads" subtitle:@"Pause automatic downloads when on cellular" isOn:tm.wifiOnlyDownloads tag:4];
-    [self addToggleTo:tStack title:@"Keep Original After Auto-Convert" subtitle:@"Retain raw source file alongside transcoded output" isOn:tm.keepOriginalAfterConvert tag:5];
+    [self addToggleTo:tStack title:@"Biometric Vault Lock" subtitle:@"Require Face ID / Touch ID for Private Tabs & Vault" isOn:tm.biometricVaultLockEnabled tag:1];
+    [self addToggleTo:tStack title:@"Force Dark Webpages" subtitle:@"Apply dark CSS styling to light websites" isOn:tm.globalForceDarkMode tag:2];
+    [self addToggleTo:tStack title:@"Clear Data on Exit" subtitle:@"Remove history, cache & cookies when closing" isOn:tm.clearDataOnExit tag:3];
+    [self addToggleTo:tStack title:@"Wi-Fi Only Downloads" subtitle:@"Pause automatic downloads on cellular" isOn:tm.wifiOnlyDownloads tag:4];
+    [self addToggleTo:tStack title:@"Keep Original After Convert" subtitle:@"Keep raw file alongside converted video or audio" isOn:tm.keepOriginalAfterConvert tag:5];
     [self.contentStack addArrangedSubview:togglesCard];
 
-    PDMGlassPillButton *clearAllBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Clear All Browsing Data Now" symbolName:@"trash.fill"];
+    PDMGlassPillButton *clearAllBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Clear Browsing Data" symbolName:@"trash"];
     clearAllBtn.customAccentColor = spec.dangerColor;
     clearAllBtn.glowing = YES;
     clearAllBtn.verticalPadding = 12.0;
@@ -246,8 +248,8 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     [self.contentStack addArrangedSubview:clearAllBtn];
 
     // 6. About & Legal (Strictly Proprietary / All Rights Reserved)
-    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"About & Legal" detail:@"v1.0.0"]];
-    PDMGlassView *legalCard = [[PDMGlassView alloc] initWithCornerRadius:20.0 elevated:YES];
+    [self.contentStack addArrangedSubview:[self sectionHeaderWithTitle:@"About" detail:@"v1.0.0"]];
+    PDMGlassView *legalCard = [[PDMGlassView alloc] initWithCornerRadius:14.0 elevated:NO];
     legalCard.showAmbientShadow = NO;
     UIStackView *legStack = [[UIStackView alloc] init];
     legStack.axis = UILayoutConstraintAxisVertical;
@@ -256,14 +258,14 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     [legalCard.contentView addSubview:legStack];
 
     UILabel *appNameLbl = [[UILabel alloc] init];
-    appNameLbl.text = @"PrismDM Browser · v1.0.0 (iOS 26 Native)";
-    appNameLbl.font = [tm displayFontOfSize:16.0 weight:UIFontWeightBold];
+    appNameLbl.text = @"PrismDM Browser · v1.0.0";
+    appNameLbl.font = [tm displayFontOfSize:15.0 weight:UIFontWeightSemibold];
     appNameLbl.textColor = spec.primaryTextColor;
     [legStack addArrangedSubview:appNameLbl];
 
     UILabel *licBadge = [[UILabel alloc] init];
     licBadge.text = @"Proprietary Software · All Rights Reserved";
-    licBadge.font = [tm bodyFontOfSize:13.0 weight:UIFontWeightBold];
+    licBadge.font = [tm bodyFontOfSize:12.5 weight:UIFontWeightMedium];
     licBadge.textColor = spec.accentColor;
     [legStack addArrangedSubview:licBadge];
 
@@ -298,7 +300,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
     UILabel *t = [[UILabel alloc] init];
     t.text = title;
-    t.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.0 weight:UIFontWeightSemibold];
+    t.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.0 weight:UIFontWeightMedium];
     t.textColor = spec.primaryTextColor;
     [txt addArrangedSubview:t];
 
@@ -323,33 +325,26 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 - (void)rebuildDynamicSelectors {
     PDMThemeManager *tm = [PDMThemeManager sharedManager];
 
-    // Themes 2x3 Grid
+    // Appearance (System / Light / Dark)
     [self clearStack:self.themeGridStack];
     NSArray<PDMThemeSpec *> *allThemes = [tm allThemeSpecs];
-    for (NSUInteger i = 0; i < allThemes.count; i += 2) {
-        UIStackView *row = [[UIStackView alloc] init];
-        row.axis = UILayoutConstraintAxisHorizontal;
-        row.spacing = 8.0;
-        row.distribution = UIStackViewDistributionFillEqually;
-        for (NSUInteger j = i; j < MIN(i + 2, allThemes.count); j++) {
-            PDMThemeSpec *ts = allThemes[j];
-            PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:ts.displayName subtitle:(ts.isOLED ? @"OLED Black" : (ts.isDark ? @"Dark Glass" : @"Light Glass"))];
-            c.symbolName = @"circle.lefthalf.filled";
-            c.customAccentColor = ts.accentColor;
-            c.tag = (NSInteger)ts.themeID;
-            c.chipSelected = (tm.currentThemeID == ts.themeID);
-            [c addTarget:self action:@selector(handleThemeTap:) forControlEvents:UIControlEventTouchUpInside];
-            [row addArrangedSubview:c];
-        }
-        [self.themeGridStack addArrangedSubview:row];
+    NSArray<NSString *> *themeIcons = @[@"circle.lefthalf.filled", @"sun.max", @"moon"];
+    for (NSUInteger i = 0; i < allThemes.count; i++) {
+        PDMThemeSpec *ts = allThemes[i];
+        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:ts.displayName subtitle:nil];
+        c.symbolName = (i < themeIcons.count) ? themeIcons[i] : @"circle.lefthalf.filled";
+        c.tag = (NSInteger)ts.themeID;
+        c.chipSelected = (tm.currentThemeID == ts.themeID);
+        [c addTarget:self action:@selector(handleThemeTap:) forControlEvents:UIControlEventTouchUpInside];
+        [self.themeGridStack addArrangedSubview:c];
     }
 
-    // Layouts
+    // Address Bar Position (Top / Bottom)
     [self clearStack:self.layoutStack];
-    for (NSInteger p = 0; p <= PDMLayoutCompactPowerBar; p++) {
+    for (NSInteger p = 0; p <= PDMLayoutChromeBottom; p++) {
         PDMLayoutPreset preset = (PDMLayoutPreset)p;
-        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:[tm displayNameForLayoutPreset:preset]
-                                                     subtitle:[tm subtitleForLayoutPreset:preset]];
+        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:[tm displayNameForLayoutPreset:preset] subtitle:nil];
+        c.symbolName = (preset == PDMLayoutChromeTop) ? @"rectangle.topthird.inset.filled" : @"rectangle.bottomthird.inset.filled";
         c.tag = p;
         c.chipSelected = (tm.layoutPreset == preset);
         [c addTarget:self action:@selector(handleLayoutTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -388,7 +383,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     // Max Concurrent
     [self clearStack:self.concStack];
     for (NSNumber *n in @[@1, @2, @3]) {
-        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:[NSString stringWithFormat:@"Max %ld Active", (long)n.integerValue] subtitle:nil];
+        PDMGlassChip *c = [[PDMGlassChip alloc] initWithTitle:[NSString stringWithFormat:@"%ld Concurrent", (long)n.integerValue] subtitle:nil];
         c.tag = n.integerValue;
         c.chipSelected = (tm.maxConcurrentDownloads == n.integerValue);
         [c addTarget:self action:@selector(handleConcTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -475,6 +470,87 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
 @end
 
+#pragma mark - Chrome-Style Rounded-Square Tab Counter Button
+
+@interface PDMChromeTabCounterButton : UIControl
+@property (nonatomic, assign) NSInteger tabCount;
+@property (nonatomic, assign) BOOL privateMode;
+- (void)applyTheme;
+@end
+
+@interface PDMChromeTabCounterButton ()
+@property (nonatomic, strong) UIView *boxView;
+@property (nonatomic, strong) UILabel *countLabel;
+@end
+
+@implementation PDMChromeTabCounterButton
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        _tabCount = 1;
+        _boxView = [[UIView alloc] init];
+        _boxView.translatesAutoresizingMaskIntoConstraints = NO;
+        _boxView.userInteractionEnabled = NO;
+        _boxView.layer.cornerRadius = 5.5;
+        _boxView.layer.cornerCurve = kCACornerCurveContinuous;
+        _boxView.layer.borderWidth = 1.75;
+        [self addSubview:_boxView];
+
+        _countLabel = [[UILabel alloc] init];
+        _countLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _countLabel.textAlignment = NSTextAlignmentCenter;
+        _countLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:11.5 weight:UIFontWeightBold];
+        _countLabel.text = @"1";
+        [_boxView addSubview:_countLabel];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_boxView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+            [_boxView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [_boxView.widthAnchor constraintEqualToConstant:22.0],
+            [_boxView.heightAnchor constraintEqualToConstant:22.0],
+            [_countLabel.centerXAnchor constraintEqualToAnchor:_boxView.centerXAnchor],
+            [_countLabel.centerYAnchor constraintEqualToAnchor:_boxView.centerYAnchor],
+            [self.widthAnchor constraintGreaterThanOrEqualToConstant:40.0],
+            [self.heightAnchor constraintGreaterThanOrEqualToConstant:38.0]
+        ]];
+        [self applyTheme];
+    }
+    return self;
+}
+
+- (void)setTabCount:(NSInteger)tabCount {
+    _tabCount = MAX(1, tabCount);
+    self.countLabel.text = (_tabCount > 99) ? @":D" : [NSString stringWithFormat:@"%ld", (long)_tabCount];
+}
+
+- (void)setPrivateMode:(BOOL)privateMode {
+    _privateMode = privateMode;
+    [self applyTheme];
+}
+
+- (void)setHighlighted:(BOOL)highlighted {
+    [super setHighlighted:highlighted];
+    [UIView animateWithDuration:0.12 animations:^{
+        self.alpha = highlighted ? 0.55 : 1.0;
+        self.transform = highlighted ? CGAffineTransformMakeScale(0.92, 0.92) : CGAffineTransformIdentity;
+    }];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [self applyTheme];
+}
+
+- (void)applyTheme {
+    PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
+    UIColor *ink = self.privateMode ? spec.accentColor : spec.primaryTextColor;
+    self.boxView.layer.borderColor = [ink resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+    self.countLabel.textColor = ink;
+}
+
+@end
+
 #pragma mark - PDMRootBrowserViewController
 
 @interface PDMRootBrowserViewController () <WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UITextFieldDelegate, UIScrollViewDelegate, UIDocumentPickerDelegate>
@@ -490,36 +566,39 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 // Main containers
 @property (nonatomic, strong) UIView *webContainerView;
 @property (nonatomic, strong) UIProgressView *loadProgressView;
+@property (nonatomic, strong) NSLayoutConstraint *webTopToTopBar;
+@property (nonatomic, strong) NSLayoutConstraint *webTopToSafeArea;
 
-// Speed Dial Start Page
+// Minimalist Chrome New Tab Page
 @property (nonatomic, strong) UIScrollView *startPageScroll;
 @property (nonatomic, strong) UIStackView *startPageStack;
+@property (nonatomic, strong) UIView *heroSearchPill;
+@property (nonatomic, strong) UIImageView *heroSearchIcon;
 @property (nonatomic, strong) UITextField *startSearchField;
 @property (nonatomic, strong) PDMGlassPillButton *startEnginePill;
 @property (nonatomic, strong) PDMGlassView *clipboardPasteCard;
 @property (nonatomic, strong) UILabel *clipboardURLLabel;
 @property (nonatomic, copy, nullable) NSString *detectedClipboardURL;
-@property (nonatomic, strong) UILabel *statAdsLabel;
-@property (nonatomic, strong) UILabel *statTrackersLabel;
-@property (nonatomic, strong) UILabel *statPopupsLabel;
-@property (nonatomic, strong) UILabel *statDataLabel;
-@property (nonatomic, strong) UILabel *statDownloadsLabel;
 @property (nonatomic, strong) UIStackView *speedDialGridStack;
 @property (nonatomic, strong) PDMGlassView *activeDownloadsMiniCard;
 @property (nonatomic, strong) UILabel *miniCardTitleLabel;
 @property (nonatomic, strong) UILabel *miniCardSubtitleLabel;
+@property (nonatomic, strong) PDMGlassPillButton *shieldSummaryPill;
 
-// Dynamic Chrome Bars (supports all 3 layout presets live)
-@property (nonatomic, strong) PDMGlassView *topChromeBar;
-@property (nonatomic, strong) PDMGlassView *bottomChromeBar;
-@property (nonatomic, strong) UIStackView *topChromeStack;
-@property (nonatomic, strong) UIStackView *bottomChromeStack;
-@property (nonatomic, strong) NSLayoutConstraint *bottomBarBottomConstraint;
+// Chrome Top & Bottom Toolbars
+@property (nonatomic, strong) UIView *topChromeBar;
+@property (nonatomic, strong) UIView *topHairline;
+@property (nonatomic, strong) UIView *bottomChromeBar;
+@property (nonatomic, strong) UIView *bottomHairline;
+@property (nonatomic, strong) UIStackView *topChromeHostStack;
+@property (nonatomic, strong) UIStackView *bottomChromeOuterStack;
+@property (nonatomic, strong) UIStackView *bottomNavRow;
+@property (nonatomic, strong) UIView *omnibarPill;
 
 @property (nonatomic, strong) PDMGlassPillButton *shieldBtn;
 @property (nonatomic, strong) UITextField *omnibarField;
 @property (nonatomic, strong) PDMGlassPillButton *mediaGrabBtn;
-@property (nonatomic, strong) PDMGlassPillButton *tabsBtn;
+@property (nonatomic, strong) PDMChromeTabCounterButton *tabsBtn;
 @property (nonatomic, strong) PDMGlassPillButton *downloadsBtn;
 @property (nonatomic, strong) PDMGlassPillButton *menuBtn;
 @property (nonatomic, strong) PDMGlassPillButton *backBtn;
@@ -531,8 +610,6 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 @property (nonatomic, strong) UITextField *findField;
 @property (nonatomic, strong) UILabel *findCountLabel;
 
-@property (nonatomic, assign) CGFloat lastScrollOffsetY;
-@property (nonatomic, assign) BOOL bottomBarCollapsed;
 @property (nonatomic, strong, nullable) PDMTabItem *observedWebViewTab;
 @end
 
@@ -598,14 +675,13 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
     NSArray *sd = [defaults arrayForKey:kPDMSpeedDialKey];
     self.speedDials = sd ? [sd mutableCopy] : [NSMutableArray arrayWithArray:@[
-        @{@"title": @"YouTube", @"url": @"https://m.youtube.com", @"symbol": @"play.rectangle.fill"},
+        @{@"title": @"YouTube", @"url": @"https://m.youtube.com", @"symbol": @"play.rectangle"},
         @{@"title": @"GitHub", @"url": @"https://github.com", @"symbol": @"chevron.left.forwardslash.chevron.right"},
-        @{@"title": @"Reddit", @"url": @"https://www.reddit.com", @"symbol": @"bubble.left.and.bubble.right.fill"},
-        @{@"title": @"Wikipedia", @"url": @"https://en.wikipedia.org", @"symbol": @"book.fill"},
-        @{@"title": @"Archive.org", @"url": @"https://archive.org", @"symbol": @"archivebox.fill"},
-        @{@"title": @"Vimeo", @"url": @"https://vimeo.com", @"symbol": @"film.fill"},
-        @{@"title": @"SoundCloud", @"url": @"https://soundcloud.com", @"symbol": @"waveform"},
-        @{@"title": @"News", @"url": @"https://news.ycombinator.com", @"symbol": @"newspaper.fill"}
+        @{@"title": @"Reddit", @"url": @"https://www.reddit.com", @"symbol": @"bubble.left.and.bubble.right"},
+        @{@"title": @"Wikipedia", @"url": @"https://en.wikipedia.org", @"symbol": @"book"},
+        @{@"title": @"Archive", @"url": @"https://archive.org", @"symbol": @"archivebox"},
+        @{@"title": @"Vimeo", @"url": @"https://vimeo.com", @"symbol": @"film"},
+        @{@"title": @"SoundCloud", @"url": @"https://soundcloud.com", @"symbol": @"waveform"}
     ]];
 }
 
@@ -634,56 +710,76 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     [self saveHistory];
 }
 
-#pragma mark - Root UI Construction
+#pragma mark - Root UI Construction (Chrome iOS Minimalist Architecture)
 
 - (void)buildRootLayout {
+    // 1. WebView container
     self.webContainerView = [[UIView alloc] init];
     self.webContainerView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.webContainerView];
 
-    // Speed Dial Start Page
+    // 2. Minimalist Chrome New Tab Page
     [self buildStartPageUI];
 
-    // Loading progress bar
+    // 3. Flush Top Chrome Bar (contains Omnibox Pill when in Top Bar mode)
+    self.topChromeBar = [[UIView alloc] init];
+    self.topChromeBar.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.topChromeBar];
+
+    self.topChromeHostStack = [[UIStackView alloc] init];
+    self.topChromeHostStack.axis = UILayoutConstraintAxisVertical;
+    self.topChromeHostStack.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.topChromeBar addSubview:self.topChromeHostStack];
+
+    self.topHairline = [[UIView alloc] init];
+    self.topHairline.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.topChromeBar addSubview:self.topHairline];
+
+    // 4. Thin Chrome Loading Progress Bar
     self.loadProgressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleBar];
     self.loadProgressView.translatesAutoresizingMaskIntoConstraints = NO;
     self.loadProgressView.hidden = YES;
     [self.view addSubview:self.loadProgressView];
 
-    // Top Chrome Bar
-    self.topChromeBar = [[PDMGlassView alloc] initWithCornerRadius:22.0 elevated:YES];
-    self.topChromeBar.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.topChromeBar];
-
-    self.topChromeStack = [[UIStackView alloc] init];
-    self.topChromeStack.axis = UILayoutConstraintAxisHorizontal;
-    self.topChromeStack.alignment = UIStackViewAlignmentCenter;
-    self.topChromeStack.spacing = 6.0;
-    self.topChromeStack.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.topChromeBar.contentView addSubview:self.topChromeStack];
-
-    // Bottom Floating Chrome Bar
-    self.bottomChromeBar = [[PDMGlassView alloc] initWithCornerRadius:26.0 elevated:YES];
-    self.bottomChromeBar.pillShape = YES;
+    // 5. Flush Bottom Chrome Toolbar (5 borderless icons + optional bottom omnibox)
+    self.bottomChromeBar = [[UIView alloc] init];
     self.bottomChromeBar.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.bottomChromeBar];
 
-    self.bottomChromeStack = [[UIStackView alloc] init];
-    self.bottomChromeStack.axis = UILayoutConstraintAxisHorizontal;
-    self.bottomChromeStack.alignment = UIStackViewAlignmentCenter;
-    self.bottomChromeStack.spacing = 6.0;
-    self.bottomChromeStack.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.bottomChromeBar.contentView addSubview:self.bottomChromeStack];
+    self.bottomHairline = [[UIView alloc] init];
+    self.bottomHairline.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.bottomChromeBar addSubview:self.bottomHairline];
 
-    // Shared Chrome Controls
-    self.shieldBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"shield.lefthalf.filled"];
+    self.bottomChromeOuterStack = [[UIStackView alloc] init];
+    self.bottomChromeOuterStack.axis = UILayoutConstraintAxisVertical;
+    self.bottomChromeOuterStack.spacing = 4.0;
+    self.bottomChromeOuterStack.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.bottomChromeBar addSubview:self.bottomChromeOuterStack];
+
+    // 6. Signature Chrome Omnibox Pill (#F1F3F4 light / #303134 dark, 40pt pill)
+    self.omnibarPill = [[UIView alloc] init];
+    self.omnibarPill.translatesAutoresizingMaskIntoConstraints = NO;
+    self.omnibarPill.layer.cornerRadius = 20.0;
+    self.omnibarPill.layer.cornerCurve = kCACornerCurveContinuous;
+
+    UIStackView *pillRow = [[UIStackView alloc] init];
+    pillRow.axis = UILayoutConstraintAxisHorizontal;
+    pillRow.alignment = UIStackViewAlignmentCenter;
+    pillRow.spacing = 4.0;
+    pillRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.omnibarPill addSubview:pillRow];
+
+    self.shieldBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"lock.fill"];
+    self.shieldBtn.borderless = YES;
+    self.shieldBtn.symbolPointSize = 13.5;
     self.shieldBtn.horizontalPadding = 8.0;
-    self.shieldBtn.verticalPadding = 8.0;
+    self.shieldBtn.verticalPadding = 6.0;
+    [self.shieldBtn setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [self.shieldBtn addTarget:self action:@selector(handleShieldTap) forControlEvents:UIControlEventTouchUpInside];
 
     self.omnibarField = [[UITextField alloc] init];
-    self.omnibarField.placeholder = @"Search or enter website";
-    self.omnibarField.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.0 weight:UIFontWeightMedium];
+    self.omnibarField.placeholder = @"Search or type URL";
+    self.omnibarField.font = [[PDMThemeManager sharedManager] bodyFontOfSize:15.0 weight:UIFontWeightRegular];
     self.omnibarField.returnKeyType = UIReturnKeyGo;
     self.omnibarField.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.omnibarField.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -692,76 +788,129 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     self.omnibarField.delegate = self;
     [self.omnibarField setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-    self.mediaGrabBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Media" symbolName:@"arrow.down.circle.fill"];
+    self.mediaGrabBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Save" symbolName:@"arrow.down.circle.fill"];
     self.mediaGrabBtn.glowing = YES;
-    self.mediaGrabBtn.horizontalPadding = 9.0;
-    self.mediaGrabBtn.verticalPadding = 7.0;
+    self.mediaGrabBtn.symbolPointSize = 12.5;
+    self.mediaGrabBtn.horizontalPadding = 8.0;
+    self.mediaGrabBtn.verticalPadding = 5.0;
     self.mediaGrabBtn.hidden = YES;
+    [self.mediaGrabBtn setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [self.mediaGrabBtn addTarget:self action:@selector(handleMediaGrabTap) forControlEvents:UIControlEventTouchUpInside];
 
-    self.tabsBtn = [[PDMGlassPillButton alloc] initWithTitle:@"1" symbolName:@"square.on.square"];
-    self.tabsBtn.horizontalPadding = 8.0;
-    self.tabsBtn.verticalPadding = 8.0;
-    [self.tabsBtn addTarget:self action:@selector(handleTabsTap) forControlEvents:UIControlEventTouchUpInside];
+    self.reloadBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"arrow.clockwise"];
+    self.reloadBtn.borderless = YES;
+    self.reloadBtn.symbolPointSize = 14.5;
+    self.reloadBtn.horizontalPadding = 8.0;
+    self.reloadBtn.verticalPadding = 6.0;
+    [self.reloadBtn setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [self.reloadBtn addTarget:self action:@selector(handleReloadTap) forControlEvents:UIControlEventTouchUpInside];
 
-    self.downloadsBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"arrow.down.to.line.compact"];
-    self.downloadsBtn.horizontalPadding = 8.0;
-    self.downloadsBtn.verticalPadding = 8.0;
-    [self.downloadsBtn addTarget:self action:@selector(handleDownloadsTap) forControlEvents:UIControlEventTouchUpInside];
+    [pillRow addArrangedSubview:self.shieldBtn];
+    [pillRow addArrangedSubview:self.omnibarField];
+    [pillRow addArrangedSubview:self.mediaGrabBtn];
+    [pillRow addArrangedSubview:self.reloadBtn];
 
-    self.menuBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"ellipsis"];
-    self.menuBtn.horizontalPadding = 8.0;
-    self.menuBtn.verticalPadding = 8.0;
-    [self.menuBtn addTarget:self action:@selector(handleMenuTap) forControlEvents:UIControlEventTouchUpInside];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.omnibarPill.heightAnchor constraintEqualToConstant:40.0],
+        [pillRow.topAnchor constraintEqualToAnchor:self.omnibarPill.topAnchor constant:2.0],
+        [pillRow.bottomAnchor constraintEqualToAnchor:self.omnibarPill.bottomAnchor constant:-2.0],
+        [pillRow.leadingAnchor constraintEqualToAnchor:self.omnibarPill.leadingAnchor constant:6.0],
+        [pillRow.trailingAnchor constraintEqualToAnchor:self.omnibarPill.trailingAnchor constant:-6.0]
+    ]];
 
+    // 7. Borderless 5-Icon Chrome Bottom Navigation Strip
     self.backBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"chevron.left"];
-    self.backBtn.horizontalPadding = 8.0;
+    self.backBtn.borderless = YES;
+    self.backBtn.symbolPointSize = 18.5;
+    self.backBtn.horizontalPadding = 10.0;
     self.backBtn.verticalPadding = 8.0;
     [self.backBtn addTarget:self action:@selector(handleBackTap) forControlEvents:UIControlEventTouchUpInside];
 
     self.forwardBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"chevron.right"];
-    self.forwardBtn.horizontalPadding = 8.0;
+    self.forwardBtn.borderless = YES;
+    self.forwardBtn.symbolPointSize = 18.5;
+    self.forwardBtn.horizontalPadding = 10.0;
     self.forwardBtn.verticalPadding = 8.0;
     [self.forwardBtn addTarget:self action:@selector(handleForwardTap) forControlEvents:UIControlEventTouchUpInside];
 
-    self.reloadBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"arrow.clockwise"];
-    self.reloadBtn.horizontalPadding = 8.0;
-    self.reloadBtn.verticalPadding = 8.0;
-    [self.reloadBtn addTarget:self action:@selector(handleReloadTap) forControlEvents:UIControlEventTouchUpInside];
+    self.downloadsBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"arrow.down.circle"];
+    self.downloadsBtn.borderless = YES;
+    self.downloadsBtn.symbolPointSize = 19.0;
+    self.downloadsBtn.horizontalPadding = 10.0;
+    self.downloadsBtn.verticalPadding = 8.0;
+    [self.downloadsBtn addTarget:self action:@selector(handleDownloadsTap) forControlEvents:UIControlEventTouchUpInside];
 
-    // Find in Page Floating Bar
+    self.tabsBtn = [[PDMChromeTabCounterButton alloc] init];
+    [self.tabsBtn addTarget:self action:@selector(handleTabsTap) forControlEvents:UIControlEventTouchUpInside];
+
+    self.menuBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"ellipsis"];
+    self.menuBtn.borderless = YES;
+    self.menuBtn.symbolPointSize = 18.5;
+    self.menuBtn.horizontalPadding = 10.0;
+    self.menuBtn.verticalPadding = 8.0;
+    [self.menuBtn addTarget:self action:@selector(handleMenuTap) forControlEvents:UIControlEventTouchUpInside];
+
+    self.bottomNavRow = [[UIStackView alloc] initWithArrangedSubviews:@[
+        self.backBtn,
+        self.forwardBtn,
+        self.downloadsBtn,
+        self.tabsBtn,
+        self.menuBtn
+    ]];
+    self.bottomNavRow.axis = UILayoutConstraintAxisHorizontal;
+    self.bottomNavRow.alignment = UIStackViewAlignmentCenter;
+    self.bottomNavRow.distribution = UIStackViewDistributionEqualCentering;
+    [self.bottomNavRow.heightAnchor constraintEqualToConstant:44.0].active = YES;
+
+    // 8. Find in Page Bar
     [self buildFindInPageBar];
 
-    self.bottomBarBottomConstraint = [self.bottomChromeBar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-8.0];
+    self.webTopToTopBar = [self.webContainerView.topAnchor constraintEqualToAnchor:self.topChromeBar.bottomAnchor];
+    self.webTopToSafeArea = [self.webContainerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.webContainerView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.webContainerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.webContainerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.webContainerView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.topChromeBar.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.topChromeBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.topChromeBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
-        [self.loadProgressView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.topChromeHostStack.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:6.0],
+        [self.topChromeHostStack.bottomAnchor constraintEqualToAnchor:self.topChromeBar.bottomAnchor constant:-8.0],
+        [self.topChromeHostStack.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:14.0],
+        [self.topChromeHostStack.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-14.0],
+
+        [self.topHairline.leadingAnchor constraintEqualToAnchor:self.topChromeBar.leadingAnchor],
+        [self.topHairline.trailingAnchor constraintEqualToAnchor:self.topChromeBar.trailingAnchor],
+        [self.topHairline.bottomAnchor constraintEqualToAnchor:self.topChromeBar.bottomAnchor],
+        [self.topHairline.heightAnchor constraintEqualToConstant:0.5],
+
         [self.loadProgressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.loadProgressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.loadProgressView.heightAnchor constraintEqualToConstant:2.5],
+        [self.loadProgressView.topAnchor constraintEqualToAnchor:self.topChromeBar.bottomAnchor],
+        [self.loadProgressView.heightAnchor constraintEqualToConstant:2.0],
 
-        [self.topChromeBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:6.0],
-        [self.topChromeBar.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:12.0],
-        [self.topChromeBar.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-12.0],
+        [self.bottomChromeBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.bottomChromeBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.bottomChromeBar.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
-        [self.topChromeStack.topAnchor constraintEqualToAnchor:self.topChromeBar.contentView.topAnchor constant:7.0],
-        [self.topChromeStack.bottomAnchor constraintEqualToAnchor:self.topChromeBar.contentView.bottomAnchor constant:-7.0],
-        [self.topChromeStack.leadingAnchor constraintEqualToAnchor:self.topChromeBar.contentView.leadingAnchor constant:10.0],
-        [self.topChromeStack.trailingAnchor constraintEqualToAnchor:self.topChromeBar.contentView.trailingAnchor constant:-10.0],
+        [self.bottomHairline.topAnchor constraintEqualToAnchor:self.bottomChromeBar.topAnchor],
+        [self.bottomHairline.leadingAnchor constraintEqualToAnchor:self.bottomChromeBar.leadingAnchor],
+        [self.bottomHairline.trailingAnchor constraintEqualToAnchor:self.bottomChromeBar.trailingAnchor],
+        [self.bottomHairline.heightAnchor constraintEqualToConstant:0.5],
 
-        [self.bottomChromeBar.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:10.0],
-        [self.bottomChromeBar.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-10.0],
-        self.bottomBarBottomConstraint,
+        [self.bottomChromeOuterStack.topAnchor constraintEqualToAnchor:self.bottomChromeBar.topAnchor constant:6.0],
+        [self.bottomChromeOuterStack.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-4.0],
+        [self.bottomChromeOuterStack.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:16.0],
+        [self.bottomChromeOuterStack.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16.0],
 
-        [self.bottomChromeStack.topAnchor constraintEqualToAnchor:self.bottomChromeBar.contentView.topAnchor constant:7.0],
-        [self.bottomChromeStack.bottomAnchor constraintEqualToAnchor:self.bottomChromeBar.contentView.bottomAnchor constant:-7.0],
-        [self.bottomChromeStack.leadingAnchor constraintEqualToAnchor:self.bottomChromeBar.contentView.leadingAnchor constant:10.0],
-        [self.bottomChromeStack.trailingAnchor constraintEqualToAnchor:self.bottomChromeBar.contentView.trailingAnchor constant:-10.0]
+        self.webTopToTopBar,
+        [self.webContainerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.webContainerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.webContainerView.bottomAnchor constraintEqualToAnchor:self.bottomChromeBar.topAnchor],
+
+        [self.startPageScroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.startPageScroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.startPageScroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.startPageScroll.bottomAnchor constraintEqualToAnchor:self.bottomChromeBar.topAnchor]
     ]];
 }
 
@@ -776,68 +925,69 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
     self.startPageStack = [[UIStackView alloc] init];
     self.startPageStack.axis = UILayoutConstraintAxisVertical;
-    self.startPageStack.spacing = 16.0;
+    self.startPageStack.spacing = 22.0;
     self.startPageStack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.startPageScroll addSubview:self.startPageStack];
 
-    // Brand Hero Title
-    UIStackView *brandCol = [[UIStackView alloc] init];
-    brandCol.axis = UILayoutConstraintAxisVertical;
-    brandCol.alignment = UIStackViewAlignmentCenter;
-    brandCol.spacing = 4.0;
-
+    // Minimalist Wordmark (clean Chrome-like presence, zero clutter)
     UILabel *brandTitle = [[UILabel alloc] init];
     brandTitle.text = @"PrismDM";
     brandTitle.tag = 8001;
-    brandTitle.font = [[PDMThemeManager sharedManager] displayFontOfSize:34.0 weight:UIFontWeightHeavy];
-    [brandCol addArrangedSubview:brandTitle];
+    brandTitle.textAlignment = NSTextAlignmentCenter;
+    brandTitle.font = [[PDMThemeManager sharedManager] displayFontOfSize:34.0 weight:UIFontWeightSemibold];
+    [self.startPageStack addArrangedSubview:brandTitle];
 
-    UILabel *brandSub = [[UILabel alloc] init];
-    brandSub.text = @"Liquid Glass Browser · 16-Part IDM Engine";
-    brandSub.tag = 8002;
-    brandSub.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.0 weight:UIFontWeightMedium];
-    [brandCol addArrangedSubview:brandSub];
-    [self.startPageStack addArrangedSubview:brandCol];
+    // Iconic Chrome Large Pill Search Bar
+    self.heroSearchPill = [[UIView alloc] init];
+    self.heroSearchPill.translatesAutoresizingMaskIntoConstraints = NO;
+    self.heroSearchPill.layer.cornerRadius = 26.0;
+    self.heroSearchPill.layer.cornerCurve = kCACornerCurveContinuous;
 
-    // Centered Hero Search Pill + Instant Search Engine Switcher
-    PDMGlassView *heroSearch = [[PDMGlassView alloc] initWithCornerRadius:26.0 elevated:YES];
-    heroSearch.pillShape = YES;
     UIStackView *searchRow = [[UIStackView alloc] init];
     searchRow.axis = UILayoutConstraintAxisHorizontal;
     searchRow.alignment = UIStackViewAlignmentCenter;
-    searchRow.spacing = 8.0;
+    searchRow.spacing = 10.0;
     searchRow.translatesAutoresizingMaskIntoConstraints = NO;
-    [heroSearch.contentView addSubview:searchRow];
+    [self.heroSearchPill addSubview:searchRow];
 
-    self.startEnginePill = [[PDMGlassPillButton alloc] initWithTitle:@"Google" symbolName:@"magnifyingglass.circle.fill"];
-    self.startEnginePill.horizontalPadding = 10.0;
-    self.startEnginePill.verticalPadding = 7.0;
-    [self.startEnginePill setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    [self.startEnginePill addTarget:self action:@selector(handleQuickSearchEngineSwitch) forControlEvents:UIControlEventTouchUpInside];
-    [searchRow addArrangedSubview:self.startEnginePill];
+    UIImageSymbolConfiguration *mgCfg = [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightMedium];
+    self.heroSearchIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass" withConfiguration:mgCfg]];
+    self.heroSearchIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [self.heroSearchIcon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [searchRow addArrangedSubview:self.heroSearchIcon];
 
     self.startSearchField = [[UITextField alloc] init];
-    self.startSearchField.placeholder = @"Search web or paste media URL...";
-    self.startSearchField.font = [[PDMThemeManager sharedManager] bodyFontOfSize:15.5 weight:UIFontWeightMedium];
+    self.startSearchField.placeholder = @"Search or type URL";
+    self.startSearchField.font = [[PDMThemeManager sharedManager] bodyFontOfSize:16.0 weight:UIFontWeightRegular];
     self.startSearchField.returnKeyType = UIReturnKeyGo;
     self.startSearchField.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.startSearchField.autocorrectionType = UITextAutocorrectionTypeNo;
     self.startSearchField.keyboardType = UIKeyboardTypeWebSearch;
+    self.startSearchField.clearButtonMode = UITextFieldViewModeWhileEditing;
     self.startSearchField.delegate = self;
     [searchRow addArrangedSubview:self.startSearchField];
 
-    [NSLayoutConstraint activateConstraints:@[
-        [searchRow.topAnchor constraintEqualToAnchor:heroSearch.contentView.topAnchor constant:8.0],
-        [searchRow.bottomAnchor constraintEqualToAnchor:heroSearch.contentView.bottomAnchor constant:-8.0],
-        [searchRow.leadingAnchor constraintEqualToAnchor:heroSearch.contentView.leadingAnchor constant:10.0],
-        [searchRow.trailingAnchor constraintEqualToAnchor:heroSearch.contentView.trailingAnchor constant:-14.0]
-    ]];
-    [self.startPageStack addArrangedSubview:heroSearch];
+    self.startEnginePill = [[PDMGlassPillButton alloc] initWithTitle:@"Google" symbolName:nil];
+    self.startEnginePill.borderless = YES;
+    self.startEnginePill.horizontalPadding = 6.0;
+    self.startEnginePill.verticalPadding = 4.0;
+    [self.startEnginePill setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [self.startEnginePill addTarget:self action:@selector(handleQuickSearchEngineSwitch) forControlEvents:UIControlEventTouchUpInside];
+    [searchRow addArrangedSubview:self.startEnginePill];
 
-    // Clipboard URL Quick-Paste Banner
-    self.clipboardPasteCard = [[PDMGlassView alloc] initWithCornerRadius:18.0 elevated:NO];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.heroSearchPill.heightAnchor constraintEqualToConstant:52.0],
+        [searchRow.topAnchor constraintEqualToAnchor:self.heroSearchPill.topAnchor constant:6.0],
+        [searchRow.bottomAnchor constraintEqualToAnchor:self.heroSearchPill.bottomAnchor constant:-6.0],
+        [searchRow.leadingAnchor constraintEqualToAnchor:self.heroSearchPill.leadingAnchor constant:18.0],
+        [searchRow.trailingAnchor constraintEqualToAnchor:self.heroSearchPill.trailingAnchor constant:-12.0]
+    ]];
+    [self.startPageStack addArrangedSubview:self.heroSearchPill];
+
+    // Clipboard URL Quick-Paste Pill (hidden unless URL copied)
+    self.clipboardPasteCard = [[PDMGlassView alloc] initWithCornerRadius:14.0 elevated:NO];
     self.clipboardPasteCard.hidden = YES;
-    self.clipboardPasteCard.customBorderColor = [spec.mediaGlowColor colorWithAlphaComponent:0.5];
+    self.clipboardPasteCard.showAmbientShadow = NO;
     UIControl *clipTap = [[UIControl alloc] init];
     clipTap.translatesAutoresizingMaskIntoConstraints = NO;
     [clipTap addTarget:self action:@selector(handleClipboardQuickPasteTap) forControlEvents:UIControlEventTouchUpInside];
@@ -851,14 +1001,14 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     clipRow.translatesAutoresizingMaskIntoConstraints = NO;
     [clipTap addSubview:clipRow];
 
-    UIImageSymbolConfiguration *clipCfg = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightSemibold];
-    UIImageView *clipIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"doc.on.clipboard.fill" withConfiguration:clipCfg]];
-    clipIcon.tintColor = spec.mediaGlowColor;
+    UIImageSymbolConfiguration *clipCfg = [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightMedium];
+    UIImageView *clipIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"link" withConfiguration:clipCfg]];
+    clipIcon.tintColor = spec.accentColor;
     [clipIcon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [clipRow addArrangedSubview:clipIcon];
 
     self.clipboardURLLabel = [[UILabel alloc] init];
-    self.clipboardURLLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:12.5 weight:UIFontWeightSemibold];
+    self.clipboardURLLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.0 weight:UIFontWeightRegular];
     self.clipboardURLLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [clipRow addArrangedSubview:self.clipboardURLLabel];
 
@@ -874,9 +1024,10 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     ]];
     [self.startPageStack addArrangedSubview:self.clipboardPasteCard];
 
-    // Active Downloads Floating Mini-Card (1 tap opens Download Manager)
-    self.activeDownloadsMiniCard = [[PDMGlassView alloc] initWithCornerRadius:20.0 elevated:YES];
+    // Active Downloads Compact Card (only visible while downloading)
+    self.activeDownloadsMiniCard = [[PDMGlassView alloc] initWithCornerRadius:14.0 elevated:NO];
     self.activeDownloadsMiniCard.hidden = YES;
+    self.activeDownloadsMiniCard.showAmbientShadow = NO;
     UIControl *miniTap = [[UIControl alloc] init];
     miniTap.translatesAutoresizingMaskIntoConstraints = NO;
     [miniTap addTarget:self action:@selector(handleDownloadsTap) forControlEvents:UIControlEventTouchUpInside];
@@ -890,9 +1041,9 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     miniRow.translatesAutoresizingMaskIntoConstraints = NO;
     [miniTap addSubview:miniRow];
 
-    UIImageSymbolConfiguration *dlCfg = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIImageSymbolWeightBold];
+    UIImageSymbolConfiguration *dlCfg = [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightMedium];
     UIImageView *dlIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"arrow.down.circle.fill" withConfiguration:dlCfg]];
-    dlIcon.tintColor = spec.mediaGlowColor;
+    dlIcon.tintColor = spec.accentColor;
     [dlIcon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [miniRow addArrangedSubview:dlIcon];
 
@@ -900,12 +1051,12 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     miniText.axis = UILayoutConstraintAxisVertical;
     miniText.spacing = 2.0;
     self.miniCardTitleLabel = [[UILabel alloc] init];
-    self.miniCardTitleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.0 weight:UIFontWeightBold];
+    self.miniCardTitleLabel.font = [[PDMThemeManager sharedManager] bodyFontOfSize:13.5 weight:UIFontWeightSemibold];
     self.miniCardTitleLabel.textColor = spec.primaryTextColor;
     [miniText addArrangedSubview:self.miniCardTitleLabel];
     self.miniCardSubtitleLabel = [[UILabel alloc] init];
-    self.miniCardSubtitleLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:12.0 weight:UIFontWeightMedium];
-    self.miniCardSubtitleLabel.textColor = spec.mediaGlowColor;
+    self.miniCardSubtitleLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:12.0 weight:UIFontWeightRegular];
+    self.miniCardSubtitleLabel.textColor = spec.secondaryTextColor;
     [miniText addArrangedSubview:self.miniCardSubtitleLabel];
     [miniRow addArrangedSubview:miniText];
 
@@ -914,110 +1065,41 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
         [miniTap.bottomAnchor constraintEqualToAnchor:self.activeDownloadsMiniCard.contentView.bottomAnchor],
         [miniTap.leadingAnchor constraintEqualToAnchor:self.activeDownloadsMiniCard.contentView.leadingAnchor],
         [miniTap.trailingAnchor constraintEqualToAnchor:self.activeDownloadsMiniCard.contentView.trailingAnchor],
-        [miniRow.topAnchor constraintEqualToAnchor:miniTap.topAnchor constant:12.0],
-        [miniRow.bottomAnchor constraintEqualToAnchor:miniTap.bottomAnchor constant:-12.0],
+        [miniRow.topAnchor constraintEqualToAnchor:miniTap.topAnchor constant:11.0],
+        [miniRow.bottomAnchor constraintEqualToAnchor:miniTap.bottomAnchor constant:-11.0],
         [miniRow.leadingAnchor constraintEqualToAnchor:miniTap.leadingAnchor constant:14.0],
         [miniRow.trailingAnchor constraintEqualToAnchor:miniTap.trailingAnchor constant:-14.0]
     ]];
     [self.startPageStack addArrangedSubview:self.activeDownloadsMiniCard];
 
-    // Brave-Style Live Privacy & Speed Stats Glass Card
-    PDMGlassView *statsCard = [[PDMGlassView alloc] initWithCornerRadius:22.0 elevated:NO];
-    UIStackView *statsOuter = [[UIStackView alloc] init];
-    statsOuter.axis = UILayoutConstraintAxisVertical;
-    statsOuter.spacing = 12.0;
-    statsOuter.translatesAutoresizingMaskIntoConstraints = NO;
-    [statsCard.contentView addSubview:statsOuter];
-
-    UILabel *statsHeader = [[UILabel alloc] init];
-    statsHeader.text = @"PRIVACY SHIELDS & SPEED TELEMETRY";
-    statsHeader.tag = 8003;
-    statsHeader.font = [[PDMThemeManager sharedManager] bodyFontOfSize:11.0 weight:UIFontWeightBold];
-    [statsOuter addArrangedSubview:statsHeader];
-
-    UIStackView *row1 = [[UIStackView alloc] init];
-    row1.axis = UILayoutConstraintAxisHorizontal;
-    row1.distribution = UIStackViewDistributionFillEqually;
-    row1.spacing = 8.0;
-    self.statAdsLabel = [self createStatCellIn:row1 caption:@"Ads Blocked" color:spec.accentColor];
-    self.statTrackersLabel = [self createStatCellIn:row1 caption:@"Trackers" color:spec.secondaryAccentColor];
-    self.statPopupsLabel = [self createStatCellIn:row1 caption:@"Popups" color:spec.warningColor];
-    [statsOuter addArrangedSubview:row1];
-
-    UIStackView *row2 = [[UIStackView alloc] init];
-    row2.axis = UILayoutConstraintAxisHorizontal;
-    row2.distribution = UIStackViewDistributionFillEqually;
-    row2.spacing = 8.0;
-    self.statDataLabel = [self createStatCellIn:row2 caption:@"Data Saved" color:spec.successColor];
-    self.statDownloadsLabel = [self createStatCellIn:row2 caption:@"Downloads" color:spec.mediaGlowColor];
-    [statsOuter addArrangedSubview:row2];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [statsOuter.topAnchor constraintEqualToAnchor:statsCard.contentView.topAnchor constant:14.0],
-        [statsOuter.bottomAnchor constraintEqualToAnchor:statsCard.contentView.bottomAnchor constant:-14.0],
-        [statsOuter.leadingAnchor constraintEqualToAnchor:statsCard.contentView.leadingAnchor constant:14.0],
-        [statsOuter.trailingAnchor constraintEqualToAnchor:statsCard.contentView.trailingAnchor constant:-14.0]
-    ]];
-    [self.startPageStack addArrangedSubview:statsCard];
-
-    // Pinned Speed Dial Glass Grid Header + Grid
-    UIStackView *dialHeader = [[UIStackView alloc] init];
-    dialHeader.axis = UILayoutConstraintAxisHorizontal;
-    dialHeader.alignment = UIStackViewAlignmentCenter;
-    UILabel *dialTitle = [[UILabel alloc] init];
-    dialTitle.text = @"SPEED DIAL";
-    dialTitle.tag = 8004;
-    dialTitle.font = [[PDMThemeManager sharedManager] bodyFontOfSize:11.5 weight:UIFontWeightBold];
-    [dialHeader addArrangedSubview:dialTitle];
-
-    PDMGlassPillButton *addDialBtn = [[PDMGlassPillButton alloc] initWithTitle:@"Pin Site" symbolName:@"plus"];
-    addDialBtn.horizontalPadding = 10.0;
-    addDialBtn.verticalPadding = 5.0;
-    [addDialBtn addTarget:self action:@selector(handleAddSpeedDialTap) forControlEvents:UIControlEventTouchUpInside];
-    [dialHeader addArrangedSubview:addDialBtn];
-    [self.startPageStack addArrangedSubview:dialHeader];
-
+    // Chrome-Style 4-Column Circular Shortcuts Grid
     self.speedDialGridStack = [[UIStackView alloc] init];
     self.speedDialGridStack.axis = UILayoutConstraintAxisVertical;
-    self.speedDialGridStack.spacing = 10.0;
+    self.speedDialGridStack.spacing = 18.0;
     [self.startPageStack addArrangedSubview:self.speedDialGridStack];
 
-    [NSLayoutConstraint activateConstraints:@[
-        [self.startPageScroll.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.startPageScroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.startPageScroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.startPageScroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    // Subtle single-line Privacy Shield status pill (tappable to open Shields)
+    UIStackView *footerCenter = [[UIStackView alloc] init];
+    footerCenter.axis = UILayoutConstraintAxisVertical;
+    footerCenter.alignment = UIStackViewAlignmentCenter;
+    self.shieldSummaryPill = [[PDMGlassPillButton alloc] initWithTitle:@"Shields Active" symbolName:@"shield.lefthalf.filled"];
+    self.shieldSummaryPill.borderless = YES;
+    self.shieldSummaryPill.symbolPointSize = 12.5;
+    self.shieldSummaryPill.horizontalPadding = 10.0;
+    self.shieldSummaryPill.verticalPadding = 6.0;
+    [self.shieldSummaryPill addTarget:self action:@selector(handleShieldTap) forControlEvents:UIControlEventTouchUpInside];
+    [footerCenter addArrangedSubview:self.shieldSummaryPill];
+    [self.startPageStack addArrangedSubview:footerCenter];
 
-        [self.startPageStack.topAnchor constraintEqualToAnchor:self.startPageScroll.contentLayoutGuide.topAnchor constant:78.0],
-        [self.startPageStack.bottomAnchor constraintEqualToAnchor:self.startPageScroll.contentLayoutGuide.bottomAnchor constant:-115.0],
-        [self.startPageStack.leadingAnchor constraintEqualToAnchor:self.startPageScroll.frameLayoutGuide.leadingAnchor constant:16.0],
-        [self.startPageStack.trailingAnchor constraintEqualToAnchor:self.startPageScroll.frameLayoutGuide.trailingAnchor constant:-16.0]
+    [NSLayoutConstraint activateConstraints:@[
+        [self.startPageStack.topAnchor constraintEqualToAnchor:self.startPageScroll.contentLayoutGuide.topAnchor constant:72.0],
+        [self.startPageStack.bottomAnchor constraintEqualToAnchor:self.startPageScroll.contentLayoutGuide.bottomAnchor constant:-32.0],
+        [self.startPageStack.leadingAnchor constraintEqualToAnchor:self.startPageScroll.frameLayoutGuide.leadingAnchor constant:20.0],
+        [self.startPageStack.trailingAnchor constraintEqualToAnchor:self.startPageScroll.frameLayoutGuide.trailingAnchor constant:-20.0]
     ]];
 
     [self refreshSearchEnginePill];
     [self rebuildSpeedDialGrid];
-}
-
-- (UILabel *)createStatCellIn:(UIStackView *)row caption:(NSString *)caption color:(UIColor *)color {
-    UIStackView *col = [[UIStackView alloc] init];
-    col.axis = UILayoutConstraintAxisVertical;
-    col.alignment = UIStackViewAlignmentCenter;
-    col.spacing = 2.0;
-
-    UILabel *val = [[UILabel alloc] init];
-    val.text = @"0";
-    val.font = [[PDMThemeManager sharedManager] tabularFontOfSize:20.0 weight:UIFontWeightHeavy];
-    val.textColor = color;
-    [col addArrangedSubview:val];
-
-    UILabel *cap = [[UILabel alloc] init];
-    cap.text = caption;
-    cap.font = [[PDMThemeManager sharedManager] bodyFontOfSize:11.0 weight:UIFontWeightMedium];
-    cap.textColor = [PDMThemeManager sharedManager].currentSpec.secondaryTextColor;
-    [col addArrangedSubview:cap];
-
-    [row addArrangedSubview:col];
-    return val;
 }
 
 - (void)rebuildSpeedDialGrid {
@@ -1027,58 +1109,71 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
         [v removeFromSuperview];
     }
     NSInteger cols = 4;
+    NSUInteger totalItems = self.speedDials.count + 1; // +1 for Chrome-style Add Shortcut circle
     NSUInteger idx = 0;
-    while (idx < self.speedDials.count) {
+    while (idx < totalItems) {
         UIStackView *row = [[UIStackView alloc] init];
         row.axis = UILayoutConstraintAxisHorizontal;
         row.spacing = 10.0;
         row.distribution = UIStackViewDistributionFillEqually;
         for (NSInteger c = 0; c < cols; c++) {
-            if (idx < self.speedDials.count) {
-                NSDictionary *entry = self.speedDials[idx];
-                PDMGlassView *tile = [[PDMGlassView alloc] initWithCornerRadius:18.0 elevated:NO];
-                tile.showAmbientShadow = NO;
-
+            if (idx < totalItems) {
+                BOOL isAddTile = (idx == self.speedDials.count);
                 UIControl *btn = [[UIControl alloc] init];
                 btn.tag = (NSInteger)idx;
-                btn.translatesAutoresizingMaskIntoConstraints = NO;
-                [btn addTarget:self action:@selector(handleSpeedDialTileTap:) forControlEvents:UIControlEventTouchUpInside];
-                UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleSpeedDialLongPress:)];
-                [btn addGestureRecognizer:lp];
-                [tile.contentView addSubview:btn];
+                if (isAddTile) {
+                    [btn addTarget:self action:@selector(handleAddSpeedDialTap) forControlEvents:UIControlEventTouchUpInside];
+                } else {
+                    [btn addTarget:self action:@selector(handleSpeedDialTileTap:) forControlEvents:UIControlEventTouchUpInside];
+                    UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleSpeedDialLongPress:)];
+                    [btn addGestureRecognizer:lp];
+                }
 
                 UIStackView *v = [[UIStackView alloc] init];
                 v.axis = UILayoutConstraintAxisVertical;
                 v.alignment = UIStackViewAlignmentCenter;
-                v.spacing = 6.0;
+                v.spacing = 8.0;
                 v.userInteractionEnabled = NO;
                 v.translatesAutoresizingMaskIntoConstraints = NO;
                 [btn addSubview:v];
 
-                NSString *sym = entry[@"symbol"];
-                UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold];
+                UIView *circle = [[UIView alloc] init];
+                circle.translatesAutoresizingMaskIntoConstraints = NO;
+                circle.backgroundColor = spec.secondaryCanvasColor;
+                circle.layer.cornerRadius = 26.0;
+                circle.userInteractionEnabled = NO;
+
+                NSString *sym = isAddTile ? @"plus" : self.speedDials[idx][@"symbol"];
+                UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:19.0 weight:UIImageSymbolWeightMedium];
                 UIImageView *iv = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:(sym.length > 0 ? sym : @"globe") withConfiguration:cfg]];
-                iv.tintColor = (idx % 2 == 0) ? spec.accentColor : spec.secondaryAccentColor;
-                [v addArrangedSubview:iv];
+                iv.contentMode = UIViewContentModeScaleAspectFit;
+                iv.tintColor = isAddTile ? spec.secondaryTextColor : spec.primaryTextColor;
+                iv.translatesAutoresizingMaskIntoConstraints = NO;
+                [circle addSubview:iv];
+
+                [NSLayoutConstraint activateConstraints:@[
+                    [circle.widthAnchor constraintEqualToConstant:52.0],
+                    [circle.heightAnchor constraintEqualToConstant:52.0],
+                    [iv.centerXAnchor constraintEqualToAnchor:circle.centerXAnchor],
+                    [iv.centerYAnchor constraintEqualToAnchor:circle.centerYAnchor]
+                ]];
+                [v addArrangedSubview:circle];
 
                 UILabel *lbl = [[UILabel alloc] init];
-                lbl.text = entry[@"title"] ?: @"Site";
-                lbl.font = [[PDMThemeManager sharedManager] bodyFontOfSize:11.5 weight:UIFontWeightSemibold];
-                lbl.textColor = spec.primaryTextColor;
+                lbl.text = isAddTile ? @"Add" : (self.speedDials[idx][@"title"] ?: @"Site");
+                lbl.font = [[PDMThemeManager sharedManager] bodyFontOfSize:11.5 weight:UIFontWeightRegular];
+                lbl.textColor = isAddTile ? spec.secondaryTextColor : spec.primaryTextColor;
+                lbl.textAlignment = NSTextAlignmentCenter;
                 lbl.lineBreakMode = NSLineBreakByTruncatingTail;
                 [v addArrangedSubview:lbl];
 
                 [NSLayoutConstraint activateConstraints:@[
-                    [btn.topAnchor constraintEqualToAnchor:tile.contentView.topAnchor],
-                    [btn.bottomAnchor constraintEqualToAnchor:tile.contentView.bottomAnchor],
-                    [btn.leadingAnchor constraintEqualToAnchor:tile.contentView.leadingAnchor],
-                    [btn.trailingAnchor constraintEqualToAnchor:tile.contentView.trailingAnchor],
-                    [v.topAnchor constraintEqualToAnchor:btn.topAnchor constant:12.0],
-                    [v.bottomAnchor constraintEqualToAnchor:btn.bottomAnchor constant:-12.0],
-                    [v.leadingAnchor constraintEqualToAnchor:btn.leadingAnchor constant:4.0],
-                    [v.trailingAnchor constraintEqualToAnchor:btn.trailingAnchor constant:-4.0]
+                    [v.topAnchor constraintEqualToAnchor:btn.topAnchor constant:2.0],
+                    [v.bottomAnchor constraintEqualToAnchor:btn.bottomAnchor constant:-2.0],
+                    [v.leadingAnchor constraintEqualToAnchor:btn.leadingAnchor constant:2.0],
+                    [v.trailingAnchor constraintEqualToAnchor:btn.trailingAnchor constant:-2.0]
                 ]];
-                [row addArrangedSubview:tile];
+                [row addArrangedSubview:btn];
                 idx++;
             } else {
                 [row addArrangedSubview:[[UIView alloc] init]];
@@ -1090,7 +1185,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
 - (void)buildFindInPageBar {
     PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
-    self.findBar = [[PDMGlassView alloc] initWithCornerRadius:20.0 elevated:YES];
+    self.findBar = [[PDMGlassView alloc] initWithCornerRadius:14.0 elevated:YES];
     self.findBar.hidden = YES;
     self.findBar.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.findBar];
@@ -1098,13 +1193,13 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     UIStackView *row = [[UIStackView alloc] init];
     row.axis = UILayoutConstraintAxisHorizontal;
     row.alignment = UIStackViewAlignmentCenter;
-    row.spacing = 8.0;
+    row.spacing = 6.0;
     row.translatesAutoresizingMaskIntoConstraints = NO;
     [self.findBar.contentView addSubview:row];
 
     self.findField = [[UITextField alloc] init];
-    self.findField.placeholder = @"Find in page...";
-    self.findField.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.0 weight:UIFontWeightMedium];
+    self.findField.placeholder = @"Find in page";
+    self.findField.font = [[PDMThemeManager sharedManager] bodyFontOfSize:14.5 weight:UIFontWeightRegular];
     self.findField.textColor = spec.primaryTextColor;
     self.findField.tintColor = spec.accentColor;
     [self.findField addTarget:self action:@selector(handleFindTextChanged) forControlEvents:UIControlEventEditingChanged];
@@ -1112,21 +1207,24 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
     self.findCountLabel = [[UILabel alloc] init];
     self.findCountLabel.text = @"0/0";
-    self.findCountLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:12.0 weight:UIFontWeightSemibold];
+    self.findCountLabel.font = [[PDMThemeManager sharedManager] tabularFontOfSize:12.0 weight:UIFontWeightMedium];
     self.findCountLabel.textColor = spec.secondaryTextColor;
     [row addArrangedSubview:self.findCountLabel];
 
     PDMGlassPillButton *prevBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"chevron.up"];
+    prevBtn.borderless = YES;
     prevBtn.horizontalPadding = 8.0; prevBtn.verticalPadding = 6.0;
     [prevBtn addTarget:self action:@selector(handleFindPrev) forControlEvents:UIControlEventTouchUpInside];
     [row addArrangedSubview:prevBtn];
 
     PDMGlassPillButton *nextBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"chevron.down"];
+    nextBtn.borderless = YES;
     nextBtn.horizontalPadding = 8.0; nextBtn.verticalPadding = 6.0;
     [nextBtn addTarget:self action:@selector(handleFindNext) forControlEvents:UIControlEventTouchUpInside];
     [row addArrangedSubview:nextBtn];
 
     PDMGlassPillButton *closeFind = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"xmark"];
+    closeFind.borderless = YES;
     closeFind.horizontalPadding = 8.0; closeFind.verticalPadding = 6.0;
     [closeFind addTarget:self action:@selector(handleCloseFindBar) forControlEvents:UIControlEventTouchUpInside];
     [row addArrangedSubview:closeFind];
@@ -1138,78 +1236,47 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
         [row.topAnchor constraintEqualToAnchor:self.findBar.contentView.topAnchor constant:8.0],
         [row.bottomAnchor constraintEqualToAnchor:self.findBar.contentView.bottomAnchor constant:-8.0],
         [row.leadingAnchor constraintEqualToAnchor:self.findBar.contentView.leadingAnchor constant:12.0],
-        [row.trailingAnchor constraintEqualToAnchor:self.findBar.contentView.trailingAnchor constant:-10.0]
+        [row.trailingAnchor constraintEqualToAnchor:self.findBar.contentView.trailingAnchor constant:-8.0]
     ]];
 }
 
-#pragma mark - 3 Live Switchable Chrome Layout Presets
+#pragma mark - Chrome Address Bar Position (Top / Bottom)
 
 - (void)handleLayoutPresetChanged {
     [self rebuildChromeForCurrentLayoutPreset];
-    [self setBottomChromeCollapsed:NO animated:YES];
 }
 
 - (void)rebuildChromeForCurrentLayoutPreset {
-    for (UIView *v in [self.topChromeStack.arrangedSubviews copy]) {
-        [self.topChromeStack removeArrangedSubview:v];
+    for (UIView *v in [self.topChromeHostStack.arrangedSubviews copy]) {
+        [self.topChromeHostStack removeArrangedSubview:v];
         [v removeFromSuperview];
     }
-    for (UIView *v in [self.bottomChromeStack.arrangedSubviews copy]) {
-        [self.bottomChromeStack removeArrangedSubview:v];
+    for (UIView *v in [self.bottomChromeOuterStack.arrangedSubviews copy]) {
+        [self.bottomChromeOuterStack removeArrangedSubview:v];
         [v removeFromSuperview];
     }
 
     PDMLayoutPreset preset = [PDMThemeManager sharedManager].layoutPreset;
-    if (preset == PDMLayoutFloatingBottom) {
-        // 1. Liquid Floating Bottom Bar (Default)
-        self.topChromeBar.hidden = YES;
-        self.bottomChromeBar.hidden = NO;
-        [self.bottomChromeStack addArrangedSubview:self.shieldBtn];
-        [self.bottomChromeStack addArrangedSubview:self.omnibarField];
-        [self.bottomChromeStack addArrangedSubview:self.mediaGrabBtn];
-        [self.bottomChromeStack addArrangedSubview:self.tabsBtn];
-        [self.bottomChromeStack addArrangedSubview:self.downloadsBtn];
-        [self.bottomChromeStack addArrangedSubview:self.menuBtn];
-    } else if (preset == PDMLayoutChromeMinimalTop) {
-        // 2. Chrome Minimal Top Bar + slim translucent bottom strip
-        self.topChromeBar.hidden = NO;
-        self.bottomChromeBar.hidden = NO;
-        [self.topChromeStack addArrangedSubview:self.shieldBtn];
-        [self.topChromeStack addArrangedSubview:self.omnibarField];
-        [self.topChromeStack addArrangedSubview:self.mediaGrabBtn];
-        [self.topChromeStack addArrangedSubview:self.reloadBtn];
-
-        [self.bottomChromeStack addArrangedSubview:self.backBtn];
-        [self.bottomChromeStack addArrangedSubview:self.forwardBtn];
-        UIView *sp = [[UIView alloc] init];
-        [self.bottomChromeStack addArrangedSubview:sp];
-        [self.bottomChromeStack addArrangedSubview:self.tabsBtn];
-        [self.bottomChromeStack addArrangedSubview:self.downloadsBtn];
-        [self.bottomChromeStack addArrangedSubview:self.menuBtn];
+    if (preset == PDMLayoutChromeTop) {
+        [self.topChromeHostStack addArrangedSubview:self.omnibarPill];
+        [self.bottomChromeOuterStack addArrangedSubview:self.bottomNavRow];
     } else {
-        // 3. Compact Power Bar (All controls exposed in one glance)
-        self.topChromeBar.hidden = YES;
-        self.bottomChromeBar.hidden = NO;
-        [self.bottomChromeStack addArrangedSubview:self.backBtn];
-        [self.bottomChromeStack addArrangedSubview:self.forwardBtn];
-        [self.bottomChromeStack addArrangedSubview:self.shieldBtn];
-        [self.bottomChromeStack addArrangedSubview:self.omnibarField];
-        [self.bottomChromeStack addArrangedSubview:self.mediaGrabBtn];
-        [self.bottomChromeStack addArrangedSubview:self.tabsBtn];
-        [self.bottomChromeStack addArrangedSubview:self.downloadsBtn];
-        [self.bottomChromeStack addArrangedSubview:self.menuBtn];
+        [self.bottomChromeOuterStack addArrangedSubview:self.omnibarPill];
+        [self.bottomChromeOuterStack addArrangedSubview:self.bottomNavRow];
     }
+    [self syncChromeVisibility];
     [self updateNavigationUI];
 }
 
-- (void)setBottomChromeCollapsed:(BOOL)collapsed animated:(BOOL)animated {
-    if (self.bottomBarCollapsed == collapsed) return;
-    self.bottomBarCollapsed = collapsed;
-    self.bottomBarBottomConstraint.constant = collapsed ? 96.0 : -8.0;
-    [UIView animateWithDuration:(animated ? 0.24 : 0.0) delay:0.0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
-        self.bottomChromeBar.alpha = collapsed ? 0.0 : 1.0;
-        [self.view layoutIfNeeded];
-    } completion:nil];
+- (void)syncChromeVisibility {
+    PDMLayoutPreset preset = [PDMThemeManager sharedManager].layoutPreset;
+    BOOL isNewTab = (self.activeTab == nil || self.activeTab.isNewTab);
+    BOOL showTopBar = (preset == PDMLayoutChromeTop && !isNewTab);
+
+    self.topChromeBar.hidden = !showTopBar;
+    self.webTopToTopBar.active = showTopBar;
+    self.webTopToSafeArea.active = !showTopBar;
+    self.omnibarPill.hidden = (preset == PDMLayoutChromeBottom && isNewTab);
 }
 
 #pragma mark - Theme Refresh
@@ -1219,6 +1286,17 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     self.overrideUserInterfaceStyle = spec.interfaceStyle;
     self.view.backgroundColor = spec.canvasColor;
     self.startPageScroll.backgroundColor = spec.canvasColor;
+    self.webContainerView.backgroundColor = spec.canvasColor;
+
+    self.topChromeBar.backgroundColor = spec.canvasColor;
+    self.bottomChromeBar.backgroundColor = spec.canvasColor;
+    self.topHairline.backgroundColor = spec.glassSpecularBorderColor;
+    self.bottomHairline.backgroundColor = spec.glassSpecularBorderColor;
+
+    self.omnibarPill.backgroundColor = spec.secondaryCanvasColor;
+    self.heroSearchPill.backgroundColor = spec.secondaryCanvasColor;
+    self.heroSearchIcon.tintColor = spec.secondaryTextColor;
+
     self.loadProgressView.progressTintColor = spec.accentColor;
     self.loadProgressView.trackTintColor = [UIColor clearColor];
 
@@ -1227,15 +1305,17 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     self.startSearchField.textColor = spec.primaryTextColor;
     self.startSearchField.tintColor = spec.accentColor;
     self.clipboardURLLabel.textColor = spec.primaryTextColor;
+    self.findField.textColor = spec.primaryTextColor;
+    self.findField.tintColor = spec.accentColor;
+
+    self.shieldBtn.customAccentColor = spec.secondaryTextColor;
+    self.reloadBtn.customAccentColor = spec.secondaryTextColor;
+    self.startEnginePill.customAccentColor = spec.secondaryTextColor;
+    self.shieldSummaryPill.customAccentColor = spec.secondaryTextColor;
+    [self.tabsBtn applyTheme];
 
     UILabel *bTitle = (UILabel *)[self.view viewWithTag:8001];
     if ([bTitle isKindOfClass:[UILabel class]]) bTitle.textColor = spec.primaryTextColor;
-    UILabel *bSub = (UILabel *)[self.view viewWithTag:8002];
-    if ([bSub isKindOfClass:[UILabel class]]) bSub.textColor = spec.accentColor;
-    UILabel *sHdr = (UILabel *)[self.view viewWithTag:8003];
-    if ([sHdr isKindOfClass:[UILabel class]]) sHdr.textColor = spec.secondaryTextColor;
-    UILabel *dHdr = (UILabel *)[self.view viewWithTag:8004];
-    if ([dHdr isKindOfClass:[UILabel class]]) dHdr.textColor = spec.secondaryTextColor;
 
     [self rebuildSpeedDialGrid];
 }
@@ -1276,7 +1356,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     PDMTabItem *tab = [[PDMTabItem alloc] init];
     tab.isPrivate = isPrivate;
     tab.isNewTab = (url == nil);
-    tab.title = isPrivate ? @"Private Tab" : @"Start Page";
+    tab.title = isPrivate ? @"Private Tab" : @"New Tab";
     tab.webView = [self createWebViewForPrivate:isPrivate];
     [list addObject:tab];
 
@@ -1334,7 +1414,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 
     self.startPageScroll.hidden = !tab.isNewTab;
     self.webContainerView.hidden = tab.isNewTab;
-    [self setBottomChromeCollapsed:NO animated:YES];
+    [self syncChromeVisibility];
     [self updateNavigationUI];
 }
 
@@ -1352,6 +1432,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
     [tab.detectedMedia removeAllObjects];
     self.startPageScroll.hidden = YES;
     self.webContainerView.hidden = NO;
+    [self syncChromeVisibility];
 
     [tab.webView loadRequest:[NSURLRequest requestWithURL:finalURL]];
     [self updateNavigationUI];
@@ -1387,6 +1468,7 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
         float prog = (float)self.activeTab.webView.estimatedProgress;
         self.loadProgressView.hidden = (prog >= 1.0f || self.activeTab.isNewTab);
         [self.loadProgressView setProgress:prog animated:YES];
+        self.reloadBtn.symbolName = (prog < 1.0f && self.activeTab.webView.isLoading) ? @"xmark" : @"arrow.clockwise";
     } else if ([keyPath isEqualToString:@"title"] || [keyPath isEqualToString:@"URL"]) {
         self.activeTab.title = self.activeTab.webView.title ?: self.activeTab.title;
         if (self.activeTab.webView.URL.absoluteString.length > 0) {
@@ -1397,10 +1479,16 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
 }
 
 - (void)updateNavigationUI {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self updateNavigationUI];
+        });
+        return;
+    }
     PDMTabItem *tab = self.activeTab;
     NSArray *list = tab.isPrivate ? self.privateTabs : self.standardTabs;
-    self.tabsBtn.titleText = [NSString stringWithFormat:@"%lu", (unsigned long)MAX((NSUInteger)1, list.count)];
-    self.tabsBtn.symbolName = tab.isPrivate ? @"lock.shield.fill" : @"square.on.square";
+    self.tabsBtn.tabCount = (NSInteger)MAX((NSUInteger)1, list.count);
+    self.tabsBtn.privateMode = tab.isPrivate;
 
     if (!self.omnibarField.isFirstResponder) {
         if (tab.isNewTab) {
@@ -1410,55 +1498,67 @@ static NSString *const kPDMSpeedDialKey = @"pdm_speed_dial_v1";
         }
     }
 
-    NSInteger blocked = [[PDMPrivacyShieldEngine sharedEngine] blockedCountForHost:tab.webView.URL.host];
-    self.shieldBtn.badgeText = (blocked > 0) ? [NSString stringWithFormat:@"%ld", (long)blocked] : nil;
+    BOOL isHTTPS = [tab.webView.URL.scheme.lowercaseString isEqualToString:@"https"];
+    self.shieldBtn.symbolName = isHTTPS ? @"lock.fill" : @"shield.lefthalf.filled";
+    self.shieldBtn.badgeText = nil;
 
     NSUInteger mediaCount = tab.detectedMedia.count;
     self.mediaGrabBtn.hidden = (mediaCount == 0 || tab.isNewTab);
     if (mediaCount > 0) {
-        self.mediaGrabBtn.titleText = [NSString stringWithFormat:@"Media (%lu)", (unsigned long)mediaCount];
+        self.mediaGrabBtn.titleText = (mediaCount == 1) ? @"Save" : [NSString stringWithFormat:@"%lu", (unsigned long)mediaCount];
     }
 
     self.backBtn.enabled = tab.webView.canGoBack;
-    self.backBtn.alpha = tab.webView.canGoBack ? 1.0 : 0.4;
+    self.backBtn.alpha = tab.webView.canGoBack ? 1.0 : 0.32;
     self.forwardBtn.enabled = tab.webView.canGoForward;
-    self.forwardBtn.alpha = tab.webView.canGoForward ? 1.0 : 0.4;
+    self.forwardBtn.alpha = tab.webView.canGoForward ? 1.0 : 0.32;
 }
 
 - (void)refreshPrivacyStatsUI {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self refreshPrivacyStatsUI];
+        });
+        return;
+    }
     PDMPrivacyShieldEngine *e = [PDMPrivacyShieldEngine sharedEngine];
-    self.statAdsLabel.text = [NSString stringWithFormat:@"%ld", (long)e.adsBlocked];
-    self.statTrackersLabel.text = [NSString stringWithFormat:@"%ld", (long)e.trackersBlocked];
-    self.statPopupsLabel.text = [NSString stringWithFormat:@"%ld", (long)e.popupsBlocked];
-    self.statDataLabel.text = [PDMThemeManager formatBytes:e.bytesSaved];
-    self.statDownloadsLabel.text = [NSString stringWithFormat:@"%ld", (long)e.downloadsCompleted];
+    NSInteger totalBlocked = e.adsBlocked + e.trackersBlocked + e.popupsBlocked;
+    if (totalBlocked > 0) {
+        self.shieldSummaryPill.titleText = [NSString stringWithFormat:@"Shields Active · %ld blocked", (long)totalBlocked];
+    } else {
+        self.shieldSummaryPill.titleText = @"Shields Active";
+    }
     [self updateNavigationUI];
 }
 
 - (void)refreshDownloadsIndicators {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self refreshDownloadsIndicators];
+        });
+        return;
+    }
     PDMDownloadManager *dm = [PDMDownloadManager sharedManager];
     NSInteger active = dm.activeCount + dm.queuedCount;
     self.downloadsBtn.badgeText = (active > 0) ? [NSString stringWithFormat:@"%ld", (long)active] : nil;
-    self.downloadsBtn.glowing = (active > 0);
 
     self.activeDownloadsMiniCard.hidden = (active == 0);
     if (active > 0) {
-        self.miniCardTitleLabel.text = [NSString stringWithFormat:@"%ld Active Transfer%@", (long)active, active == 1 ? @"" : @"s"];
-        self.miniCardSubtitleLabel.text = [NSString stringWithFormat:@"%@ · Tap to open Download Manager", [PDMThemeManager formatSpeed:dm.aggregateSpeedBytesPerSec]];
+        self.miniCardTitleLabel.text = [NSString stringWithFormat:@"%ld active download%@", (long)active, active == 1 ? @"" : @"s"];
+        self.miniCardSubtitleLabel.text = [NSString stringWithFormat:@"%@ · Tap to view", [PDMThemeManager formatSpeed:dm.aggregateSpeedBytesPerSec]];
     }
 }
 
 - (void)refreshSearchEnginePill {
     PDMThemeManager *tm = [PDMThemeManager sharedManager];
     self.startEnginePill.titleText = [tm displayNameForSearchEngine:tm.searchEngine];
-    self.startEnginePill.symbolName = [tm symbolNameForSearchEngine:tm.searchEngine];
 }
 
 - (void)checkClipboardForURL {
     NSString *clip = [UIPasteboard generalPasteboard].string;
     if (clip.length > 7 && ([clip.lowercaseString hasPrefix:@"http://"] || [clip.lowercaseString hasPrefix:@"https://"])) {
         self.detectedClipboardURL = clip;
-        self.clipboardURLLabel.text = [NSString stringWithFormat:@"Go to copied link: %@", clip];
+        self.clipboardURLLabel.text = [NSString stringWithFormat:@"Link you copied: %@", clip];
         self.clipboardPasteCard.hidden = NO;
     } else {
         self.detectedClipboardURL = nil;
@@ -1568,7 +1668,6 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
         if (webView.URL.absoluteString.length > 0) {
             [self recordHistoryTitle:(webView.title ?: webView.URL.host) urlString:webView.URL.absoluteString];
         }
-        // Record passive tracker shield telemetry credit per loaded page when shields are enabled
         if (settings.shieldsEnabled && host.length > 0) {
             [[PDMPrivacyShieldEngine sharedEngine] recordBlockedTrackerForHost:host count:1];
         }
@@ -1582,11 +1681,10 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
                  windowFeatures:(WKWindowFeatures *__unused)windowFeatures {
     NSString *host = webView.URL.host;
     PDMSiteShieldSettings *settings = [[PDMPrivacyShieldEngine sharedEngine] settingsForHost:host];
-    // Block script-triggered popups (not activated by link click), allow user-tapped links cleanly
     BOOL isUserLink = (navigationAction.navigationType == WKNavigationTypeLinkActivated);
     if (settings.shieldsEnabled && settings.blockPopups && !isUserLink) {
         [[PDMPrivacyShieldEngine sharedEngine] recordBlockedPopupForHost:host];
-        [PDMToastBanner showInView:self.view message:@"Blocked popup redirect" symbolName:@"shield.lefthalf.filled"];
+        [PDMToastBanner showInView:self.view message:@"Blocked popup" symbolName:@"shield.lefthalf.filled"];
         return nil;
     }
     if (navigationAction.request.URL) {
@@ -1595,22 +1693,22 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
     return nil;
 }
 
-#pragma mark - Scroll Auto-Hide (Floating Bottom Bar Preset)
+#pragma mark - TextField Navigation
 
-- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if ([PDMThemeManager sharedManager].layoutPreset != PDMLayoutFloatingBottom) return;
-    if (self.activeTab.isNewTab) return;
-    CGFloat y = scrollView.contentOffset.y;
-    CGFloat dy = y - self.lastScrollOffsetY;
-    if (y > 60.0 && dy > 14.0) {
-        [self setBottomChromeCollapsed:YES animated:YES];
-    } else if (dy < -12.0 || y <= 10.0) {
-        [self setBottomChromeCollapsed:NO animated:YES];
+- (void)textFieldDidBeginEditing:(UITextField *)textField {
+    if (textField == self.omnibarField && !self.activeTab.isNewTab && self.activeTab.urlString.length > 0) {
+        textField.text = self.activeTab.urlString;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [textField selectAll:nil];
+        });
     }
-    self.lastScrollOffsetY = y;
 }
 
-#pragma mark - TextField Navigation
+- (void)textFieldDidEndEditing:(UITextField *)textField {
+    if (textField == self.omnibarField) {
+        [self updateNavigationUI];
+    }
+}
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
     NSString *input = textField.text ?: @"";
@@ -1927,18 +2025,36 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
     NSMutableArray<PDMGlassActionItem *> *actions = [NSMutableArray array];
     __weak typeof(self) weakSelf = self;
 
-    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Download Manager"
-                                                  subtitle:@"Multi-part IDM transfers & live conversions"
-                                                symbolName:@"arrow.down.circle.fill"
+    [actions addObject:[PDMGlassActionItem actionWithTitle:@"New Tab"
+                                                  subtitle:nil
+                                                symbolName:@"plus.square"
+                                               destructive:NO
+                                                   handler:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf createAndActivateTabIsPrivate:NO initialURL:nil];
+    }]];
+
+    [actions addObject:[PDMGlassActionItem actionWithTitle:@"New Private Tab"
+                                                  subtitle:nil
+                                                symbolName:@"eye.slash"
+                                               destructive:NO
+                                                   handler:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf createAndActivateTabIsPrivate:YES initialURL:nil];
+    }]];
+
+    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Downloads"
+                                                  subtitle:@"Active transfers & format conversions"
+                                                symbolName:@"arrow.down.circle"
                                                destructive:NO
                                                    handler:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) [strongSelf handleDownloadsTap];
     }]];
 
-    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Downloads Library & Offline Tools"
-                                                  subtitle:@"Pro Player, Transcoder, ZIP, SHA-256 & Private Vault"
-                                                symbolName:@"folder.fill"
+    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Library"
+                                                  subtitle:@"Saved videos, audio, documents & private vault"
+                                                symbolName:@"folder"
                                                destructive:NO
                                                    handler:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1946,18 +2062,18 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
     }]];
 
     if (onWebpage) {
-        [actions addObject:[PDMGlassActionItem actionWithTitle:@"Grab All Media & Links"
-                                                      subtitle:@"Scan page for videos, audio, images, archives & docs"
-                                                    symbolName:@"square.stack.3d.down.right.fill"
+        [actions addObject:[PDMGlassActionItem actionWithTitle:@"Grab Page Media & Links"
+                                                      subtitle:@"Videos, audio, images & files on this page"
+                                                    symbolName:@"square.stack.3d.down.right"
                                                    destructive:NO
                                                        handler:^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (strongSelf) [strongSelf launchResourceGrabber];
         }]];
 
-        [actions addObject:[PDMGlassActionItem actionWithTitle:(siteSettings.forceDarkMode ? @"Disable Force Dark Mode" : @"Force Dark Mode on Website")
-                                                      subtitle:@"Smart CSS dark theme preserving photos & video"
-                                                    symbolName:@"moon.stars.fill"
+        [actions addObject:[PDMGlassActionItem actionWithTitle:(siteSettings.forceDarkMode ? @"Disable Dark Webpage" : @"Force Dark Webpage")
+                                                      subtitle:@"Apply dark styling to this site"
+                                                    symbolName:@"moon"
                                                    destructive:NO
                                                        handler:^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1967,9 +2083,9 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
             [strongSelf.activeTab.webView evaluateJavaScript:[[PDMPrivacyShieldEngine sharedEngine] toggleDarkModeJavaScript:siteSettings.forceDarkMode] completionHandler:nil];
         }]];
 
-        [actions addObject:[PDMGlassActionItem actionWithTitle:@"Distraction-Free Reader Mode"
-                                                      subtitle:@"Clean article typography with font & paper controls"
-                                                    symbolName:@"doc.plaintext.fill"
+        [actions addObject:[PDMGlassActionItem actionWithTitle:@"Reader Mode"
+                                                      subtitle:@"Clean reading view"
+                                                    symbolName:@"doc.plaintext"
                                                    destructive:NO
                                                        handler:^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1977,8 +2093,8 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
         }]];
 
         [actions addObject:[PDMGlassActionItem actionWithTitle:@"Find in Page"
-                                                      subtitle:@"Highlight matches and jump next/previous"
-                                                    symbolName:@"text.magnifyingglass"
+                                                      subtitle:nil
+                                                    symbolName:@"magnifyingglass"
                                                    destructive:NO
                                                        handler:^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1987,7 +2103,7 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
 
         [actions addObject:[PDMGlassActionItem actionWithTitle:@"Add Bookmark"
                                                       subtitle:(self.activeTab.title ?: host)
-                                                    symbolName:@"bookmark.fill"
+                                                    symbolName:@"bookmark"
                                                    destructive:NO
                                                        handler:^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -2001,9 +2117,9 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
             [PDMToastBanner showInView:strongSelf.view message:@"Saved to Bookmarks" symbolName:@"bookmark.fill"];
         }]];
 
-        [actions addObject:[PDMGlassActionItem actionWithTitle:@"Save Webpage as PDF"
-                                                      subtitle:@"Export full page into Library Documents"
-                                                    symbolName:@"doc.richtext.fill"
+        [actions addObject:[PDMGlassActionItem actionWithTitle:@"Save as PDF"
+                                                      subtitle:@"Export webpage to Library"
+                                                    symbolName:@"doc.richtext"
                                                    destructive:NO
                                                        handler:^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -2011,27 +2127,27 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
         }]];
     }
 
-    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Bookmarks Manager"
-                                                  subtitle:@"Browse folders + JSON Export / Import"
-                                                symbolName:@"books.vertical.fill"
+    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Bookmarks"
+                                                  subtitle:[NSString stringWithFormat:@"%lu saved", (unsigned long)self.bookmarks.count]
+                                                symbolName:@"book"
                                                destructive:NO
                                                    handler:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) [strongSelf presentBookmarksSheet];
     }]];
 
-    [actions addObject:[PDMGlassActionItem actionWithTitle:@"Browsing History"
-                                                  subtitle:[NSString stringWithFormat:@"%lu visited pages", (unsigned long)self.historyEntries.count]
-                                                symbolName:@"clock.arrow.circlepath"
+    [actions addObject:[PDMGlassActionItem actionWithTitle:@"History"
+                                                  subtitle:[NSString stringWithFormat:@"%lu pages", (unsigned long)self.historyEntries.count]
+                                                symbolName:@"clock"
                                                destructive:NO
                                                    handler:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) [strongSelf presentHistorySheet];
     }]];
 
-    PDMGlassActionItem *studioItem = [PDMGlassActionItem actionWithTitle:@"Themes, Layouts & Settings"
-                                                                subtitle:@"6 Liquid Glass Themes · 3 Chrome Presets · About & Legal"
-                                                              symbolName:@"sparkles"
+    PDMGlassActionItem *studioItem = [PDMGlassActionItem actionWithTitle:@"Settings"
+                                                                subtitle:@"Appearance, address bar, search & downloads"
+                                                              symbolName:@"gearshape"
                                                              destructive:NO
                                                                  handler:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -2041,9 +2157,9 @@ decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
     [actions addObject:studioItem];
 
     [PDMGlassActionSheetController presentFrom:self
-                                         title:@"PrismDM Browser"
-                                      subtitle:(onWebpage ? host : @"Speed Dial Dashboard")
-                                    symbolName:@"sparkles"
+                                         title:@"Menu"
+                                      subtitle:(onWebpage ? host : @"New Tab")
+                                    symbolName:@"ellipsis.circle"
                                        actions:actions];
 }
 

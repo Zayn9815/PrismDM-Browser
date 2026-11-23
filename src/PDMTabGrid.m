@@ -58,6 +58,8 @@
         [headerRow addSubview:_hostLabel];
 
         _closeBtn = [[PDMGlassPillButton alloc] initWithTitle:nil symbolName:@"xmark"];
+        _closeBtn.borderless = YES;
+        _closeBtn.symbolPointSize = 12.5;
         _closeBtn.horizontalPadding = 6.0;
         _closeBtn.verticalPadding = 6.0;
         _closeBtn.translatesAutoresizingMaskIntoConstraints = NO;
@@ -67,7 +69,7 @@
         _snapshotView = [[UIImageView alloc] init];
         _snapshotView.contentMode = UIViewContentModeScaleAspectFill;
         _snapshotView.clipsToBounds = YES;
-        _snapshotView.layer.cornerRadius = 12.0;
+        _snapshotView.layer.cornerRadius = 10.0;
         _snapshotView.translatesAutoresizingMaskIntoConstraints = NO;
         [_cardGlass.contentView addSubview:_snapshotView];
 
@@ -84,16 +86,16 @@
 
             [headerRow.topAnchor constraintEqualToAnchor:_cardGlass.contentView.topAnchor constant:8.0],
             [headerRow.leadingAnchor constraintEqualToAnchor:_cardGlass.contentView.leadingAnchor constant:10.0],
-            [headerRow.trailingAnchor constraintEqualToAnchor:_cardGlass.contentView.trailingAnchor constant:-8.0],
-            [headerRow.heightAnchor constraintEqualToConstant:32.0],
+            [headerRow.trailingAnchor constraintEqualToAnchor:_cardGlass.contentView.trailingAnchor constant:-6.0],
+            [headerRow.heightAnchor constraintEqualToConstant:30.0],
 
             [_titleLabel.topAnchor constraintEqualToAnchor:headerRow.topAnchor],
             [_titleLabel.leadingAnchor constraintEqualToAnchor:headerRow.leadingAnchor],
-            [_titleLabel.trailingAnchor constraintEqualToAnchor:_closeBtn.leadingAnchor constant:-6.0],
+            [_titleLabel.trailingAnchor constraintEqualToAnchor:_closeBtn.leadingAnchor constant:-4.0],
 
             [_hostLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:1.0],
             [_hostLabel.leadingAnchor constraintEqualToAnchor:headerRow.leadingAnchor],
-            [_hostLabel.trailingAnchor constraintEqualToAnchor:_closeBtn.leadingAnchor constant:-6.0],
+            [_hostLabel.trailingAnchor constraintEqualToAnchor:_closeBtn.leadingAnchor constant:-4.0],
 
             [_closeBtn.trailingAnchor constraintEqualToAnchor:headerRow.trailingAnchor],
             [_closeBtn.centerYAnchor constraintEqualToAnchor:headerRow.centerYAnchor],
@@ -121,15 +123,16 @@
 - (void)configureWithTab:(PDMTabItem *)tab isActive:(BOOL)isActive {
     PDMThemeSpec *spec = [PDMThemeManager sharedManager].currentSpec;
     self.cardGlass.customBorderColor = isActive ? spec.accentColor : nil;
-    self.cardGlass.customTintColor = isActive ? [spec.accentColor colorWithAlphaComponent:0.14] : nil;
+    self.cardGlass.customTintColor = isActive ? [spec.accentColor colorWithAlphaComponent:0.08] : nil;
     [self.cardGlass applyTheme];
 
-    self.titleLabel.text = tab.title.length > 0 ? tab.title : (tab.isPrivate ? @"Private Tab" : @"Start Page");
+    self.titleLabel.text = tab.title.length > 0 ? tab.title : (tab.isPrivate ? @"Private Tab" : @"New Tab");
     self.titleLabel.textColor = spec.primaryTextColor;
 
     NSURL *u = tab.urlString.length > 0 ? [NSURL URLWithString:tab.urlString] : nil;
-    self.hostLabel.text = u.host ?: (tab.isPrivate ? @"Non-Persistent Vault" : @"Speed Dial");
-    self.hostLabel.textColor = tab.isPrivate ? spec.secondaryAccentColor : spec.secondaryTextColor;
+    self.hostLabel.text = u.host ?: (tab.isPrivate ? @"Private" : @"New Tab");
+    self.hostLabel.textColor = spec.secondaryTextColor;
+    self.closeBtn.customAccentColor = spec.secondaryTextColor;
 
     if (tab.snapshot) {
         self.snapshotView.image = tab.snapshot;
@@ -137,10 +140,10 @@
         self.placeholderIcon.hidden = YES;
     } else {
         self.snapshotView.image = nil;
-        self.snapshotView.backgroundColor = [spec.secondaryCanvasColor colorWithAlphaComponent:0.85];
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:30.0 weight:UIImageSymbolWeightLight];
-        self.placeholderIcon.image = [UIImage systemImageNamed:(tab.isPrivate ? @"eye.slash.fill" : @"sparkles") withConfiguration:cfg];
-        self.placeholderIcon.tintColor = tab.isPrivate ? spec.secondaryAccentColor : spec.accentColor;
+        self.snapshotView.backgroundColor = spec.canvasColor;
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:26.0 weight:UIImageSymbolWeightLight];
+        self.placeholderIcon.image = [UIImage systemImageNamed:(tab.isPrivate ? @"eye.slash" : @"globe") withConfiguration:cfg];
+        self.placeholderIcon.tintColor = spec.tertiaryTextColor;
         self.placeholderIcon.hidden = NO;
     }
 }
